@@ -1,8 +1,6 @@
 import { fileURLToPath, URL } from 'node:url'
-
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import vueDevTools from 'vite-plugin-vue-devtools'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -10,7 +8,7 @@ export default defineConfig(({ mode }) => {
   const apiOrigin = apiBase.replace(/\/api$/, '')
 
   return {
-    plugins: [vue(), vueDevTools()],
+    plugins: [vue()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -23,6 +21,29 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
       },
+    },
+    build: {
+      outDir: 'dist',
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('/node_modules/vue') ||
+                id.includes('/node_modules/vue-router') ||
+                id.includes('/node_modules/pinia')) {
+              return 'vue-vendor'
+            }
+            if (id.includes('/node_modules/chart.js') ||
+                id.includes('/node_modules/vue-chartjs')) {
+              return 'chart-vendor'
+            }
+            if (id.includes('/node_modules/axios')) {
+              return 'axios'
+            }
+          },
+        },
+      },
+      chunkSizeWarningLimit: 1000,
     },
   }
 })
