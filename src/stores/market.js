@@ -21,7 +21,7 @@ export const useMarketStore = defineStore('market', () => {
     error.value = null
     try {
       const res = await getMarket()
-      market.value = res.data.data ?? res.data
+      market.value = res.data
       // Prefer server timestamp, fallback ke waktu lokal
       lastSync.value =
         market.value?.fetched_at

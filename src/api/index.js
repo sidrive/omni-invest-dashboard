@@ -6,9 +6,21 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Response interceptor — unwrap .data, surface errors uniformly
+// Response interceptor — unwrap Flask envelope, surface errors uniformly
+// Flask always returns { "status": "ok"|"error", "data": { ... } }
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    // Surface application-level errors (status 200 but status: 'error')
+    if (res.data?.status === 'error') {
+      return Promise.reject(new Error(res.data?.message ?? 'API error'))
+    }
+    // Unwrap envelope: { status, data: <payload> } → expose payload as res.data
+    // Falls back to res.data itself if no inner 'data' field exists
+    if (res.data?.data !== undefined) {
+      return { ...res, data: res.data.data }
+    }
+    return res
+  },
   (err) => {
     const msg = err.response?.data?.message || err.message || 'Network error'
     return Promise.reject(new Error(msg))
