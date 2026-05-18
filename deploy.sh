@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+echo "Set Node Version..."
+nvm use
+
 echo "🔨 Building..."
 npm run build
 
