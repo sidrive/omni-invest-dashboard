@@ -1,14 +1,17 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { usePortfolioStore } from '@/stores/portfolio'
+import { useWatchlistStore } from '@/stores/watchlist'
 import { useToast } from '@/composables/useToast'
 import AppTopbar from '@/components/layout/AppTopbar.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import StockSearchInput from '@/components/ui/StockSearchInput.vue'
 import AssetFormModal from '@/components/portfolio/AssetFormModal.vue'
 import PLPreviewModal from '@/components/portfolio/PLPreviewModal.vue'
 import { formatRupiah, formatJuta } from '@/utils/formatters'
 
 const portfolioStore = usePortfolioStore()
+const watchlistStore = useWatchlistStore()
 const { showToast } = useToast()
 
 // ── Tabs ──────────────────────────────────────────────────────
@@ -16,7 +19,8 @@ const TABS = [
   { key: 'emas',   label: '🥇 Emas' },
   { key: 'saham',  label: '📈 Saham' },
   { key: 'reksa',  label: '🏦 Reksa Dana' },
-  { key: 'target', label: '⚖️ Target Alokasi' },
+  { key: 'target',    label: '⚖️ Target Alokasi' },
+  { key: 'watchlist', label: '📡 Watchlist' },
 ]
 const activeTab = ref('emas')
 
@@ -33,14 +37,17 @@ function populateLocal() {
   localSaham.value  = JSON.parse(JSON.stringify(p.saham     ?? []))
   localReksa.value  = JSON.parse(JSON.stringify(p.reksadana ?? []))
   localTarget.value = JSON.parse(JSON.stringify(
-    p.target_alokasi ?? { emas: 20, saham: 60, reksa: 20 }
+    p.target_allocation ?? { emas: 20, saham: 60, reksa: 20 }
   ))
 }
 
-onMounted(async () => {
-  if (!portfolioStore.portfolio) await portfolioStore.fetchPortfolio()
+async function loadData() {
+  await portfolioStore.fetchPortfolio()
   populateLocal()
-})
+}
+
+onMounted(() => { loadData(); loadWatchlist() })
+onActivated(() => { loadData(); loadWatchlist() })
 
 watch(() => portfolioStore.portfolio, () => {
   if (!portfolioStore.hasChanges) populateLocal()
@@ -48,10 +55,10 @@ watch(() => portfolioStore.portfolio, () => {
 
 // ── localPortfolio for PLPreviewModal ─────────────────────────
 const localPortfolio = computed(() => ({
-  emas:           localEmas.value,
-  saham:          localSaham.value,
-  reksadana:      localReksa.value,
-  target_alokasi: localTarget.value,
+  emas:              localEmas.value,
+  saham:             localSaham.value,
+  reksadana:         localReksa.value,
+  target_allocation: localTarget.value,
 }))
 
 // ── Target allocation ─────────────────────────────────────────
@@ -123,6 +130,14 @@ function confirmDelete() {
 // ── Preview & Save modal ──────────────────────────────────────
 const showPreview = ref(false)
 
+function openPreview() {
+  if (!portfolioStore.portfolio) {
+    showToast('Data portfolio belum loaded. Coba Sync dulu.', 'error')
+    return
+  }
+  showPreview.value = true
+}
+
 function onPreviewSaved() {
   populateLocal()
 }
@@ -131,6 +146,127 @@ function onPreviewSaved() {
 function resetAll() {
   portfolioStore.resetChanges()
   populateLocal()
+}
+
+// ── Watchlist ──────────────────────────────────────────────────
+const watchSaham      = ref([])
+const watchReksa      = ref([])
+const watchHasChanges = ref(false)
+
+const showSahamAdd   = ref(false)
+const sahamPick      = ref(null)   // { kode, nama, sektor, isManual }
+const manualTicker   = ref('')
+const validating     = ref(false)
+const validateResult = ref(null)
+
+const showReksaForm = ref(false)
+const newReksaId    = ref('')
+const newReksaNama  = ref('')
+
+const SEKTOR_STYLE = {
+  'Keuangan':      { background: 'rgba(0,132,255,0.12)',   color: '#0084ff' },
+  'Teknologi':     { background: 'rgba(0,229,160,0.12)',   color: '#00e5a0' },
+  'Energi':        { background: 'rgba(255,107,53,0.12)',  color: '#ff6b35' },
+  'Konsumer':      { background: 'rgba(163,130,255,0.12)', color: '#a382ff' },
+  'Tambang':       { background: 'rgba(255,217,61,0.12)',  color: '#ffd93d' },
+  'Pertanian':     { background: 'rgba(82,196,82,0.12)',   color: '#52c452' },
+  'Komunikasi':    { background: 'rgba(0,200,220,0.12)',   color: '#00c8dc' },
+  'Properti':      { background: 'rgba(255,165,0,0.12)',   color: '#ffa500' },
+  'Infrastruktur': { background: 'rgba(136,153,187,0.12)', color: '#8899bb' },
+  'Kesehatan':     { background: 'rgba(255,120,130,0.12)', color: '#ff7882' },
+  'Industri':      { background: 'rgba(100,140,255,0.12)', color: '#648cff' },
+  'Perdagangan':   { background: 'rgba(255,140,60,0.12)',  color: '#ff8c3c' },
+}
+function sektorStyle(sektor) {
+  return SEKTOR_STYLE[sektor] ?? { background: 'rgba(136,153,187,0.1)', color: '#8899bb' }
+}
+
+function populateWatchlist() {
+  const wl = watchlistStore.watchlist
+  watchSaham.value = (wl.saham ?? []).map(s =>
+    typeof s === 'string' ? { kode: s, nama: s, sektor: '' } : s
+  )
+  watchReksa.value      = [...(wl.reksa ?? [])]
+  watchHasChanges.value = false
+}
+
+async function loadWatchlist() {
+  await watchlistStore.fetchWatchlist()
+  populateWatchlist()
+}
+
+function onSearchSelect(item) {
+  sahamPick.value      = item
+  manualTicker.value   = item.isManual ? item.kode : ''
+  validateResult.value = null
+}
+
+async function doValidate() {
+  const ticker = sahamPick.value?.isManual
+    ? manualTicker.value.trim()
+    : sahamPick.value?.kode
+  if (!ticker) return
+  validating.value     = true
+  validateResult.value = null
+  validateResult.value = await watchlistStore.validateTicker(ticker)
+  validating.value     = false
+}
+
+function addSahamToWatch() {
+  if (!validateResult.value?.valid) return
+  const entry = sahamPick.value?.isManual
+    ? { kode: validateResult.value.ticker, nama: validateResult.value.name ?? validateResult.value.ticker, sektor: 'Manual' }
+    : { kode: sahamPick.value.kode, nama: sahamPick.value.nama, sektor: sahamPick.value.sektor }
+
+  if (watchSaham.value.find(s => s.kode === entry.kode)) {
+    showToast(`${entry.kode} sudah ada di watchlist`, 'error')
+    return
+  }
+  watchSaham.value.push(entry)
+  watchHasChanges.value = true
+  sahamPick.value      = null
+  manualTicker.value   = ''
+  validateResult.value = null
+  showSahamAdd.value   = false
+}
+
+function removeSaham(kode) {
+  if (watchSaham.value.length <= 1) return
+  watchSaham.value      = watchSaham.value.filter(s => s.kode !== kode)
+  watchHasChanges.value = true
+}
+
+function addReksaToWatch() {
+  const id   = newReksaId.value.trim()
+  const nama = newReksaNama.value.trim()
+  if (!id || !nama) return
+  if (watchReksa.value.find(r => r.id === id)) {
+    showToast(`ID "${id}" sudah ada di watchlist`, 'error')
+    return
+  }
+  watchReksa.value.push({ id, nama })
+  watchHasChanges.value = true
+  newReksaId.value      = ''
+  newReksaNama.value    = ''
+  showReksaForm.value   = false
+}
+
+function removeReksa(id) {
+  watchReksa.value      = watchReksa.value.filter(r => r.id !== id)
+  watchHasChanges.value = true
+}
+
+async function saveWatchlistChanges() {
+  const result = await watchlistStore.saveWatchlist({
+    saham: watchSaham.value,
+    reksa: watchReksa.value,
+  })
+  if (result.ok) {
+    watchHasChanges.value = false
+    showToast('✅ Watchlist disimpan! Perubahan aktif mulai fetch berikutnya.', 'success')
+  } else {
+    showToast(result.message || 'Gagal menyimpan watchlist', 'error')
+  }
 }
 </script>
 
@@ -382,6 +518,157 @@ function resetAll() {
         </div>
       </div>
 
+      <!-- ── WATCHLIST ── -->
+      <div v-else-if="activeTab === 'watchlist'" class="tab-content">
+
+        <div class="info-box">
+          ℹ️ Data saham IDX80 tersedia. Saham lain bisa ditambah via input manual dengan validasi Yahoo Finance.
+          <br /><span style="color: var(--text3); font-size: 11px">Perubahan aktif pada fetch berikutnya (jam 09:00–16:00)</span>
+        </div>
+
+        <!-- Section 1: Saham -->
+        <div class="wl-section">
+          <div class="tab-header">
+            <span class="wl-section-title">📈 Saham Dipantau</span>
+            <button
+              class="btn-add"
+              @click="showSahamAdd = !showSahamAdd; sahamPick = null; validateResult = null"
+            >
+              {{ showSahamAdd ? '✕ Batal' : '+ Tambah Saham' }}
+            </button>
+          </div>
+
+          <div v-if="showSahamAdd" class="wl-add-form">
+            <StockSearchInput @select="onSearchSelect" />
+
+            <!-- Preview card after selection -->
+            <div v-if="sahamPick" class="saham-preview-card">
+              <div class="preview-head">
+                <span class="mono preview-kode">
+                  {{ sahamPick.isManual ? (manualTicker || sahamPick.kode) : sahamPick.kode }}
+                </span>
+                <span v-if="!sahamPick.isManual" class="preview-nama">{{ sahamPick.nama }}</span>
+                <span
+                  v-if="!sahamPick.isManual && sahamPick.sektor"
+                  class="sektor-badge"
+                  :style="sektorStyle(sahamPick.sektor)"
+                >{{ sahamPick.sektor }}</span>
+              </div>
+
+              <!-- Manual: ticker input -->
+              <input
+                v-if="sahamPick.isManual"
+                :value="manualTicker"
+                class="wl-input mono"
+                placeholder="Kode saham (contoh: BMRI)"
+                @input="manualTicker = $event.target.value.toUpperCase(); validateResult = null"
+                @keyup.enter="doValidate"
+              />
+
+              <!-- Validate row -->
+              <div class="preview-validate-row">
+                <button
+                  class="btn-validate"
+                  :disabled="(sahamPick.isManual && !manualTicker.trim()) || validating"
+                  @click="doValidate"
+                >
+                  <span v-if="validating" class="spin">⟳</span>
+                  <span v-else>🔍 {{ sahamPick.isManual ? 'Validasi' : 'Validasi Harga' }}</span>
+                </button>
+
+                <div
+                  v-if="validateResult"
+                  :class="['wl-validate-result wl-validate-inline', validateResult.valid ? 'result-ok' : 'result-err']"
+                >
+                  <template v-if="validateResult.valid">
+                    ✅ <span class="mono wl-price">Rp{{ validateResult.price?.toLocaleString('id-ID') }}</span>
+                    <span v-if="sahamPick.isManual" class="preview-nama"> — {{ validateResult.name }}</span>
+                  </template>
+                  <template v-else>❌ Tidak valid</template>
+                </div>
+              </div>
+
+              <button
+                class="btn-add-confirmed"
+                :disabled="!validateResult?.valid"
+                @click="addSahamToWatch"
+              >
+                ➕ Tambah ke Watchlist
+              </button>
+            </div>
+          </div>
+
+          <div v-if="watchSaham.length === 0 && !showSahamAdd" class="empty-tab">
+            Belum ada saham dipantau
+          </div>
+          <div v-else-if="watchSaham.length > 0" class="wl-list">
+            <div v-for="s in watchSaham" :key="s.kode" class="wl-item">
+              <div class="wl-item-info">
+                <div class="wl-item-row1">
+                  <span class="mono wl-ticker">{{ s.kode }}</span>
+                  <span v-if="s.sektor" class="sektor-badge sektor-badge-sm" :style="sektorStyle(s.sektor)">
+                    {{ s.sektor }}
+                  </span>
+                </div>
+                <span class="wl-item-nama">{{ s.nama }}</span>
+              </div>
+              <button
+                class="btn-icon btn-del"
+                :disabled="watchSaham.length <= 1"
+                :title="watchSaham.length <= 1 ? 'Minimal 1 saham di watchlist' : 'Hapus'"
+                @click="removeSaham(s.kode)"
+              >🗑</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Reksa Dana -->
+        <div class="wl-section">
+          <div class="tab-header">
+            <span class="wl-section-title">🏦 Reksa Dana Dipantau</span>
+            <button class="btn-add" @click="showReksaForm = !showReksaForm">
+              {{ showReksaForm ? '✕ Batal' : '+ Tambah Reksa Dana' }}
+            </button>
+          </div>
+
+          <div v-if="showReksaForm" class="wl-add-form">
+            <input
+              :value="newReksaId"
+              class="wl-input mono"
+              placeholder="ID (contoh: MANULIFE_SAHAM)"
+              @input="newReksaId = $event.target.value.toUpperCase()"
+            />
+            <input
+              v-model="newReksaNama"
+              class="wl-input"
+              placeholder="Nama lengkap produk"
+            />
+            <button
+              class="btn-add-confirmed"
+              :disabled="!newReksaId.trim() || !newReksaNama.trim()"
+              @click="addReksaToWatch"
+            >
+              ➕ Tambah ke Watchlist
+            </button>
+          </div>
+
+          <div v-if="watchReksa.length === 0 && !showReksaForm" class="empty-tab">
+            Belum ada reksa dana dipantau
+          </div>
+          <div v-else-if="watchReksa.length > 0" class="wl-list">
+            <div v-for="item in watchReksa" :key="item.id" class="wl-item">
+              <div class="wl-item-info">
+                <span class="wl-item-nama">{{ item.nama }}</span>
+                <span class="mono wl-item-id">{{ item.id }}</span>
+              </div>
+              <button class="btn-icon btn-del" @click="removeReksa(item.id)">🗑</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- /watchlist -->
+
     </div><!-- /content -->
 
     <!-- ── Sticky Save Bar ── -->
@@ -393,8 +680,33 @@ function resetAll() {
         </div>
         <div class="save-bar-actions">
           <button class="btn-reset" @click="resetAll">↩ Reset</button>
-          <button class="btn-preview" @click="showPreview = true">
+          <button
+            class="btn-preview"
+            :disabled="portfolioStore.loading || !portfolioStore.portfolio"
+            @click="openPreview"
+          >
             👁 Preview &amp; Simpan →
+          </button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- ── Watchlist Save Bar ── -->
+    <Transition name="savebar">
+      <div v-if="watchHasChanges" class="save-bar wl-save-bar">
+        <div class="save-bar-msg">
+          <span class="save-dot wl-dot" />
+          <span>Watchlist belum disimpan</span>
+        </div>
+        <div class="save-bar-actions">
+          <button class="btn-reset" @click="populateWatchlist">↩ Reset</button>
+          <button
+            class="btn-save-wl"
+            :disabled="watchlistStore.saving"
+            @click="saveWatchlistChanges"
+          >
+            <span v-if="watchlistStore.saving" class="spin">⟳</span>
+            <span v-else>💾 Simpan Watchlist</span>
           </button>
         </div>
       </div>
@@ -436,6 +748,7 @@ function resetAll() {
     <PLPreviewModal
       v-model="showPreview"
       :after="localPortfolio"
+      :original-portfolio="portfolioStore.originalPortfolio"
       @saved="onPreviewSaved"
     />
 
@@ -859,6 +1172,241 @@ function resetAll() {
 .spin { display: inline-block; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Watchlist tab ── */
+.info-box {
+  background: rgba(0, 132, 255, 0.06);
+  border: 1px solid rgba(0, 132, 255, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.wl-section {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wl-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wl-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.wl-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.wl-input {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+.wl-input::placeholder { color: var(--text3); }
+.wl-input:focus { border-color: var(--accent); }
+.wl-input.mono { font-family: var(--font-mono); }
+
+.btn-validate {
+  padding: 8px 14px;
+  background: rgba(0, 132, 255, 0.08);
+  border: 1px solid rgba(0, 132, 255, 0.35);
+  border-radius: 7px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn-validate:hover:not(:disabled) { background: rgba(0, 132, 255, 0.15); box-shadow: var(--glow-blue); }
+.btn-validate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.wl-validate-result {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.result-ok  { background: rgba(0,229,160,0.07); border: 1px solid rgba(0,229,160,0.25); color: var(--text); }
+.result-err { background: rgba(255,71,87,0.07);  border: 1px solid rgba(255,71,87,0.25);  color: var(--red); }
+
+.wl-price {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  margin-left: 4px;
+}
+
+.btn-add-confirmed {
+  align-self: flex-start;
+  padding: 8px 16px;
+  background: rgba(0,229,160,0.08);
+  border: 1px solid rgba(0,229,160,0.3);
+  border-radius: 7px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-add-confirmed:hover:not(:disabled) { background: rgba(0,229,160,0.15); box-shadow: var(--glow-accent); }
+.btn-add-confirmed:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.wl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wl-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  transition: border-color 0.15s;
+}
+.wl-item:hover { border-color: rgba(0,229,160,0.2); }
+
+.wl-ticker {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+
+.wl-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wl-item-nama { font-size: 13px; font-weight: 500; color: var(--text); }
+.wl-item-id   { font-family: var(--font-mono); font-size: 10px; color: var(--text3); }
+
+/* Saham preview card */
+.saham-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preview-kode {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+
+.preview-nama {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.preview-validate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wl-validate-inline {
+  flex: 1;
+  margin: 0;
+}
+
+/* Sektor badge */
+.sektor-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid currentColor;
+  opacity: 0.9;
+  text-transform: uppercase;
+}
+
+.sektor-badge-sm {
+  font-size: 8px;
+  padding: 1px 6px;
+}
+
+.wl-item-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Watchlist save bar variant */
+.wl-save-bar   { border-top-color: rgba(0, 132, 255, 0.35); }
+.wl-dot        { background: var(--blue) !important; }
+
+.btn-save-wl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  background: rgba(0, 132, 255, 0.12);
+  border: 1px solid rgba(0, 132, 255, 0.4);
+  border-radius: 7px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-save-wl:hover:not(:disabled) { background: rgba(0, 132, 255, 0.2); box-shadow: var(--glow-blue); }
+.btn-save-wl:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .content { padding: 12px; gap: 12px; }
@@ -867,5 +1415,7 @@ function resetAll() {
   .asset-grid { grid-template-columns: 1fr; }
   .save-bar { left: 0; padding: 10px 16px; flex-wrap: wrap; }
   .save-bar-actions { width: 100%; justify-content: flex-end; }
+  .wl-form-row { flex-direction: column; }
+  .btn-validate { width: 100%; justify-content: center; }
 }
 </style>

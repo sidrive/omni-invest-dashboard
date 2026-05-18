@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getPortfolio, savePortfolio as apiSave } from '@/api'
+import { useReportStore } from '@/stores/report'
 
 export const usePortfolioStore = defineStore('portfolio', () => {
   // ── State ──
@@ -43,7 +44,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     error.value = null
     try {
       const res = await getPortfolio()
-      const data = res.data.data ?? res.data
+      const data = res.data
       portfolio.value = data
       // Simpan snapshot untuk deteksi perubahan
       originalPortfolio.value = JSON.parse(JSON.stringify(data))
@@ -59,11 +60,19 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     saving.value = true
     error.value = null
     try {
-      const res = await apiSave(data)
-      const saved = res.data.data ?? res.data
-      portfolio.value = saved
-      originalPortfolio.value = JSON.parse(JSON.stringify(saved))
-      hasChanges.value = false
+      const payload = {
+        owner:             portfolio.value?.owner || 'sidrive',
+        last_updated:      new Date().toISOString().slice(0, 10),
+        target_allocation: data.target_allocation,
+        emas:              data.emas      || [],
+        saham:             data.saham     || [],
+        reksadana:         data.reksadana || [],
+      }
+      await apiSave(payload)
+      // Reload fresh dari Firestore agar UI sinkron
+      await fetchPortfolio()
+      // Trigger pipeline di background — tidak ditunggu
+      useReportStore().runPipeline()
       return { ok: true }
     } catch (e) {
       error.value = e.message

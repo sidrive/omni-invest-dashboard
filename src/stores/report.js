@@ -30,7 +30,7 @@ export const useReportStore = defineStore('report', () => {
     error.value = null
     try {
       const res = await getReport()
-      report.value = res.data.data ?? res.data
+      report.value = res.data
     } catch (e) {
       error.value = e.message
     } finally {

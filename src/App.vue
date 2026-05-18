@@ -42,7 +42,7 @@ provide('showToast', showToast)
   /* Text */
   --text:    #e8edf5;
   --text2:   #8899bb;
-  --text3:   #4a5878;
+  --text3: #FFFFFF;
 
   /* Semantic */
   --green:   #00e5a0;

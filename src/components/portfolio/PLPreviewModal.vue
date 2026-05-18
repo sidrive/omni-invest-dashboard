@@ -1,12 +1,13 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { usePortfolioStore } from '@/stores/portfolio'
 import { useToast } from '@/composables/useToast'
 import { formatRupiah, formatJuta } from '@/utils/formatters'
 
 const props = defineProps({
-  modelValue: { type: Boolean, default: false },
-  after:      { type: Object,  default: null },  // localPortfolio to save
+  modelValue:         { type: Boolean, default: false },
+  after:              { type: Object,  default: null },   // localPortfolio to save
+  originalPortfolio:  { type: Object,  default: null },   // snapshot before edits
 })
 
 const emit = defineEmits(['update:modelValue', 'saved'])
@@ -30,7 +31,7 @@ function detectChanges(beforeList, afterList) {
   }
 }
 
-const before = computed(() => portfolioStore.originalPortfolio)
+const before = computed(() => props.originalPortfolio ?? portfolioStore.originalPortfolio)
 
 const emasChanges  = computed(() => detectChanges(before.value?.emas, props.after?.emas))
 const sahamChanges = computed(() => detectChanges(before.value?.saham, props.after?.saham))
@@ -78,13 +79,21 @@ function diffClass(after, bef) {
 }
 
 // ── Save ──
+const savePhase = ref('')  // '' | 'saving' | 'pipeline'
+
 async function confirmSave() {
+  savePhase.value = 'saving'
   const result = await portfolioStore.savePortfolio(props.after)
   if (result.ok) {
-    showToast('Portofolio berhasil disimpan!', 'success')
+    savePhase.value = 'pipeline'
+    showToast('✅ Portfolio disimpan & analisis diperbarui!', 'success')
     emit('saved')
+    // Brief pause so phase-2 label is visible before close
+    await new Promise(r => setTimeout(r, 600))
     close()
+    savePhase.value = ''
   } else {
+    savePhase.value = ''
     showToast(result.message ?? 'Gagal menyimpan', 'error')
   }
 }
@@ -205,10 +214,11 @@ const CHANGE_LABELS = { add: 'TAMBAH', edit: 'UBAH', delete: 'HAPUS' }
             <button class="btn-back" @click="close">← Kembali Edit</button>
             <button
               class="btn-confirm"
-              :disabled="portfolioStore.saving"
+              :disabled="savePhase !== ''"
               @click="confirmSave"
             >
-              <span v-if="portfolioStore.saving" class="spin">⟳</span>
+              <span v-if="savePhase === 'saving'"><span class="spin">⟳</span> Menyimpan portfolio...</span>
+              <span v-else-if="savePhase === 'pipeline'">⚙️ Mengupdate analisis...</span>
               <span v-else>✅ Konfirmasi &amp; Simpan</span>
             </button>
           </div>

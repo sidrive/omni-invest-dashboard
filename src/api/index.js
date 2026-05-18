@@ -44,4 +44,9 @@ export const addTransaction = (data) => api.post('/transactions', data)
 // --- Pipeline ---
 export const runPipeline = () => api.post('/run')
 
+// --- Watchlist ---
+export const getWatchlist = () => api.get('/watchlist')
+export const saveWatchlist = (data) => api.post('/watchlist', data)
+export const validateTicker = (ticker) => api.post('/validate-ticker', { ticker })
+
 export default api
