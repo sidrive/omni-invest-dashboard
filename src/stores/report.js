@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getReport, runPipeline as apiRun } from '@/api'
+import { usePortfolioStore } from '@/stores/portfolio'
 
 export const useReportStore = defineStore('report', () => {
   // ── State ──
@@ -30,7 +31,25 @@ export const useReportStore = defineStore('report', () => {
     error.value = null
     try {
       const res = await getReport()
-      report.value = res.data
+      const data = res.data
+
+      // Patch current_nab from portfolio store when report doesn't have it
+      if (data?.reksadana?.items?.length) {
+        const portfolioReksa = usePortfolioStore().reksaList
+        data.reksadana.items = data.reksadana.items.map((item) => {
+          if (item.current_nab) return item
+          const pfItem = portfolioReksa.find((p) => p.id === item.id)
+          if (!pfItem?.current_nab) return item
+          const nab = pfItem.current_nab
+          const modal = (item.qty_unit ?? 0) * (item.avg_nab ?? 0)
+          const nilaiPasar = (item.qty_unit ?? 0) * nab
+          const pl = nilaiPasar - modal
+          const plPct = modal > 0 ? (pl / modal) * 100 : 0
+          return { ...item, current_nab: nab, nilai_pasar: nilaiPasar, pl, pl_pct: plPct }
+        })
+      }
+
+      report.value = data
     } catch (e) {
       error.value = e.message
     } finally {

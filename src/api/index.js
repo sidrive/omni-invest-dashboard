@@ -33,6 +33,7 @@ export const savePortfolio = (data) => api.post('/portfolio', data)
 
 // --- Market ---
 export const getMarket = () => api.get('/market')
+export const getGoldHistory = () => api.get('/gold-history')
 
 // --- Report ---
 export const getReport = () => api.get('/report')

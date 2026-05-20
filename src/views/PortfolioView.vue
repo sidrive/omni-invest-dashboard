@@ -16,7 +16,13 @@ const summary    = computed(() => reportStore.summary)
 const report     = computed(() => reportStore.report)
 const emasItems  = computed(() => report.value?.emas?.items ?? [])
 const sahamItems = computed(() => report.value?.saham?.items ?? [])
-const reksaItems = computed(() => report.value?.reksadana?.items ?? [])
+const reksaItems = computed(() =>
+  (report.value?.reksadana?.items ?? []).map((item) => {
+    if (item.current_nab) return item
+    // Last-resort: fallback to avg_nab so column never shows 0
+    return { ...item, current_nab: item.avg_nab ?? 0 }
+  }),
+)
 
 const totalItems = computed(
   () => emasItems.value.length + sahamItems.value.length + reksaItems.value.length,

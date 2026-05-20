@@ -1,5 +1,6 @@
 <script setup>
 import SignalBadge from '@/components/ui/SignalBadge.vue'
+import PriceSparkline from '@/components/charts/PriceSparkline.vue'
 import { formatRupiah, formatPct, formatUnit } from '@/utils/formatters'
 
 defineProps({
@@ -115,9 +116,10 @@ function rowClass(row) {
                 </div>
               </template>
 
-              <!-- Price + change_pct, two lines -->
+              <!-- Price + change_pct + sparkline -->
               <template v-else-if="col.type === 'price-change'">
                 <div class="cell-price-chg">
+                  <PriceSparkline :change-pct="row.change_pct ?? 0" :width="48" :height="20" />
                   <span class="cell-mono">{{ formatRupiah(row.market_price) }}</span>
                   <span :class="['chg-line', (row.change_pct ?? 0) >= 0 ? 'pos' : 'neg']">
                     {{ (row.change_pct ?? 0) >= 0 ? '▲' : '▼' }}

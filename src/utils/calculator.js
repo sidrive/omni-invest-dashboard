@@ -80,16 +80,19 @@ export function suggestLot(totalAset, harga) {
 }
 
 /**
- * Generate 7 deterministic sparkline data points from a changePct value.
+ * Generate deterministic sparkline data points from a changePct value.
  * Deterministic so the chart doesn't jump on re-render.
+ * @param {number} changePct
+ * @param {number} points  — number of data points (default 7)
  */
-export function generateSparklineData(changePct = 0) {
+export function generateSparklineData(changePct = 0, points = 7) {
   const base = 50
-  // Pre-defined noise pattern — same every time for same changePct sign
-  const noisePattern = [0, 0.4, -0.25, 0.6, -0.15, 0.45, 0]
-  const trendStep = changePct / 6
+  const noise = [0, 0.4, -0.25, 0.6, -0.15, 0.45, 0, -0.3, 0.5, -0.2]
+  const trendStep = changePct / Math.max(points - 1, 1)
   const noiseAmp = Math.min(Math.abs(changePct) * 0.4, 6)
-  return noisePattern.map((n, i) => base + trendStep * i + n * noiseAmp)
+  return Array.from({ length: points }, (_, i) =>
+    base + trendStep * i + (noise[i % noise.length] ?? 0) * noiseAmp,
+  )
 }
 
 /**

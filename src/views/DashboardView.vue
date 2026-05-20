@@ -38,9 +38,20 @@ const emasAktual   = computed(() => allokasi.value?.aktual?.emas ?? 0)
 const emasTarget   = computed(() => allokasi.value?.target?.emas ?? 25)
 const isEmasOver   = computed(() => emasAktual.value > emasTarget.value)
 
-// Market prices (from report — structure is guaranteed by API spec)
-const emasItem  = computed(() => reportStore.report?.emas?.items?.[0] ?? null)
-const sahamItems = computed(() => reportStore.report?.saham?.items ?? [])
+// Live market data from market store
+const emasMarket = computed(() => marketStore.market?.emas ?? null)
+const stocksData = computed(() => {
+  const stocks = marketStore.market?.saham?.stocks
+  if (!stocks) return []
+  return Object.entries(stocks)
+    .filter(([code, data]) =>
+      data?.price > 0 && !code.includes('{') && !code.includes('kode'),
+    )
+    .map(([code, data]) => ({
+      code: code.replace('.JK', ''),
+      ...data,
+    }))
+})
 
 // Pipeline — computed so timestamps stay reactive
 const pipeline = computed(() => [
@@ -233,15 +244,19 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
           </div>
 
           <!-- Emas row -->
-          <div v-if="emasItem" class="price-row price-row--emas">
-            <span class="price-icon">🥇</span>
-            <div class="price-info">
-              <span class="price-name">Emas Antam</span>
-              <span class="price-unit">per gram</span>
+          <div v-if="emasMarket" class="market-row">
+            <div class="market-info">
+              <span class="price-ticker clr-warn">🥇 ANTAM</span>
+              <span class="price-value">{{ formatRupiah(emasMarket.antam_per_gram) }}</span>
+              <span class="price-unit">/gram</span>
             </div>
-            <div class="price-right">
-              <span class="price-value">{{ formatRupiah(emasItem.market_price) }}</span>
-              <SignalBadge :signal="emasItem.signal ?? 'HOLD'" />
+            <div class="market-sparkline">
+              <PriceSparkline
+                :data="marketStore.goldSparklineData"
+                :change-pct="marketStore.goldChangePct"
+                :width="100"
+                :height="40"
+              />
             </div>
           </div>
 
@@ -249,25 +264,24 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
 
           <!-- Stock rows -->
           <div
-            v-for="item in sahamItems"
-            :key="item.id"
-            class="price-row"
+            v-for="stock in stocksData"
+            :key="stock.code"
+            class="market-row"
           >
-            <div class="price-ticker">{{ item.id }}</div>
-            <div class="price-info">
-              <span class="price-name">{{ item.nama }}</span>
-            </div>
-            <PriceSparkline :change-pct="item.change_pct ?? 0" />
-            <div class="price-right price-right--stock">
-              <span class="price-value">{{ formatRupiah(item.market_price) }}</span>
-              <span :class="['price-chg', (item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
-                {{ formatPct(item.change_pct ?? 0) }}
+            <div class="market-info">
+              <span class="price-ticker clr-blue">{{ stock.code }}</span>
+              <span class="price-value">{{ formatRupiah(stock.price) }}</span>
+              <span :class="['price-chg', (stock.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
+                {{ (stock.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(stock.change_pct ?? 0).toFixed(2) }}%
               </span>
+            </div>
+            <div class="market-sparkline">
+              <PriceSparkline :change-pct="stock.change_pct ?? 0" :width="100" :height="40" />
             </div>
           </div>
 
           <!-- Empty fallback -->
-          <div v-if="!emasItem && sahamItems.length === 0" class="price-empty">
+          <div v-if="!emasMarket && !stocksData.length" class="price-empty">
             <LoadingSpinner size="sm" />
             <span>Memuat harga pasar...</span>
           </div>
@@ -496,49 +510,55 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
 .recs-safe { font-size: 12px; color: var(--text2); }
 
 /* ── Live prices ── */
-.price-row {
+.market-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 0;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
 }
-.price-row--emas { padding: 10px 0; }
-.price-sep       { height: 1px; background: var(--border); margin: 4px 0; }
+.market-row:last-of-type { border-bottom: none; }
+.price-sep { height: 1px; background: var(--border); margin: 2px 0; }
 
-.price-icon   { font-size: 18px; flex-shrink: 0; }
+.market-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.market-sparkline {
+  flex-shrink: 0;
+  width: 100px;
+}
+
 .price-ticker {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  color: var(--blue);
-  min-width: 36px;
-  flex-shrink: 0;
+  letter-spacing: 0.5px;
 }
-.price-info  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.price-name  { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.price-unit  { font-size: 10px; color: var(--text3); font-family: var(--font-mono); }
-
-.price-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-  flex-shrink: 0;
-}
-.price-right--stock { gap: 2px; }
 
 .price-value {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.price-chg {
+.price-unit {
   font-family: var(--font-mono);
   font-size: 10px;
+  color: var(--text3);
+}
+
+.price-chg {
+  font-family: var(--font-mono);
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -679,6 +699,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
 .clr-green  { color: var(--green); }
 .clr-red    { color: var(--red); }
 .clr-orange { color: var(--orange); }
+.clr-warn   { color: var(--warn); }
+.clr-blue   { color: var(--blue); }
 .clr-accent { color: var(--accent); }
 .clr-muted  { color: var(--text3); }
 

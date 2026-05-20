@@ -24,7 +24,7 @@ function emptyForm() {
     // saham
     ticker: '', qty_lot: null, support: null, resistance: null, stop_loss: null,
     // reksa
-    qty_unit: null, avg_buy_nab: null,
+    qty_unit: null, avg_buy_nab: null, current_nab: null,
   }
 }
 
@@ -98,6 +98,7 @@ function submit() {
   if (props.type === 'reksa') {
     data = { id: form.id.trim(), nama: form.nama.trim(),
              qty_unit: +form.qty_unit, avg_buy_nab: +form.avg_buy_nab,
+             current_nab: form.current_nab ? +form.current_nab : +form.avg_buy_nab,
              catatan: form.catatan.trim() }
   }
 
@@ -227,6 +228,17 @@ function submit() {
                   <span v-if="errors.avg_buy_nab" class="err-msg">{{ errors.avg_buy_nab }}</span>
                 </div>
               </div>
+              <div class="field">
+                <label class="field-label">NAB Saat Ini (Rp)</label>
+                <input
+                  v-model.number="form.current_nab"
+                  type="number"
+                  min="1"
+                  class="field-input mono"
+                  :placeholder="form.avg_buy_nab ? String(form.avg_buy_nab) : '2340'"
+                />
+                <span class="field-hint nab-hint">Update setiap hari setelah jam 16:30 WIB</span>
+              </div>
             </template>
 
             <!-- ── Catatan (common) ── -->
@@ -299,6 +311,7 @@ function submit() {
 .field-input:read-only { opacity: 0.5; cursor: not-allowed; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .err-msg { font-size: 10px; color: var(--red); font-family: var(--font-mono); }
+.nab-hint { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--blue); margin-top: 2px; }
 
 .modal-footer {
   display: flex; justify-content: flex-end; gap: 10px;
