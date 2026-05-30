@@ -24,7 +24,7 @@ function emptyForm() {
     // saham
     ticker: '', qty_lot: null, support: null, resistance: null, stop_loss: null,
     // reksa
-    qty_unit: null, avg_buy_nab: null, current_nab: null,
+    qty_unit: null, avg_buy_nab: null, current_nab: null, rd_code: '',
   }
 }
 
@@ -99,6 +99,7 @@ function submit() {
     data = { id: form.id.trim(), nama: form.nama.trim(),
              qty_unit: +form.qty_unit, avg_buy_nab: +form.avg_buy_nab,
              current_nab: form.current_nab ? +form.current_nab : +form.avg_buy_nab,
+             rd_code: form.rd_code?.trim().toUpperCase() || '',
              catatan: form.catatan.trim() }
   }
 
@@ -239,6 +240,18 @@ function submit() {
                 />
                 <span class="field-hint nab-hint">Update setiap hari setelah jam 16:30 WIB</span>
               </div>
+              <div class="field">
+                <label class="field-label">
+                  Kode Bibit <span class="field-hint">(untuk auto-fetch NAB)</span>
+                </label>
+                <input
+                  v-model="form.rd_code"
+                  class="field-input mono"
+                  placeholder="RD424"
+                  @input="form.rd_code = form.rd_code.toUpperCase()"
+                />
+                <span class="field-hint rd-hint">Dari URL bibit.id/reksadana/RD424/nama-reksa</span>
+              </div>
             </template>
 
             <!-- ── Catatan (common) ── -->
@@ -312,6 +325,7 @@ function submit() {
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .err-msg { font-size: 10px; color: var(--red); font-family: var(--font-mono); }
 .nab-hint { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--blue); margin-top: 2px; }
+.rd-hint  { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--text3); margin-top: 2px; }
 
 .modal-footer {
   display: flex; justify-content: flex-end; gap: 10px;

@@ -1,6 +1,8 @@
 # CLAUDE PROMPTS — OMNI-INVEST DASHBOARD
+
 > Kumpulan prompt siap pakai di Cursor editor dengan Claude extension
 > Selalu sertakan PROJECT_CONTEXT.md sebagai context sebelum menjalankan prompt ini
+> Last updated: 2026-05-30
 
 ---
 
@@ -13,6 +15,7 @@
 5. Claude generate code sesuai konteks project
 
 **Shortcut penting:**
+
 - `Cmd+L` → Claude chat panel
 - `Cmd+K` → Inline edit (select kode dulu)
 - `Cmd+I` → Composer (generate file baru)
@@ -48,7 +51,8 @@ Setup fondasi project Vue 3 dari awal. Buatkan file-file berikut:
    - Response interceptor: unwrap data.data, throw jika status='error'
    - Error interceptor: pesan friendly untuk network error/timeout
    - Export semua functions: getPortfolio, savePortfolio, getMarket,
-     getReport, getTransactions, addTransaction, runPipeline
+     getReport, getTransactions, addTransaction, runPipeline,
+     getGoldHistory, getWatchlist, saveWatchlist, validateTicker
 
 5. `src/utils/formatters.js`
    - formatRupiah(n), formatJuta(n), formatPct(n)
@@ -89,9 +93,15 @@ Buatkan semua 4 Pinia stores. Setiap store harus:
 - Tidak ada fetch langsung di component — harus via store
 
 1. `src/stores/market.js`
-   State: market(null), lastSync('--'), loading(false), error(null)
-   Action: fetchMarket() → GET /api/market, update lastSync dari fetched_at
-   Getters: goldPrice, stockList (array dari market.saham.stocks)
+   State: market(null), lastSync('--'), loading(false), error(null), goldHistory([])
+   Actions:
+   - fetchMarket() → GET /api/market, update lastSync dari fetched_at
+   - fetchGoldHistory() → GET /api/gold-history
+   Getters:
+   - goldPrice → market.emas.price
+   - stockList → array dari market.saham.stocks
+   - goldSparklineData → array harga dari goldHistory
+   - goldChangePct → perubahan harga emas hari ini
 
 2. `src/stores/portfolio.js`
    State: portfolio(null), originalPortfolio(null), hasChanges(false),
@@ -247,7 +257,11 @@ Layout dari atas ke bawah:
 3. GRID 2-1 (2/3 + 1/3)
    Kiri — AllocationChart component:
    - 3 progress bar Emas/Saham/Reksa (aktual vs target)
-   - Analyst insight di bawah (allokasi.rekomendasi)
+   - Rekomendasi rebalance di bawah:
+     * Data dari allokasi.rekomendasi = array object {action, asset, actual, target}
+     * BUKAN array string — jangan akses rec sebagai string
+     * Template: <span :class="rec.action === 'TAMBAH' ? 'clr-green' : 'clr-orange'">{{ rec.action }}</span>
+     * {{ (rec.actual ?? 0).toFixed(1) }}% → {{ rec.target }}%
 
    Kanan — Live Harga Pasar:
    - Baris emas: icon + harga + status badge
@@ -292,14 +306,12 @@ Layout:
    - Harga pasar: tampilkan arrow + changePct dengan warna
    - S/R: format "S: Rp5.800 | R: Rp6.500" kecil di bawah harga
    - Row background: rgba(255,71,87,0.04) untuk AVG_DOWN, rgba(0,229,160,0.03) untuk SELL
-   - Tooltip pada SignalBadge: tampilkan signal_reason
 
 4. Section REKSA DANA
    Header: "🏦 Reksa Dana" + badge "DCA Rutin"
    Tabel columns: Produk | Unit | Avg NAB | NAB Saat Ini | Nilai | P&L | Signal
-
-Buatkan `src/components/portfolio/AssetTable.vue` sebagai wrapper tabel yang reusable
-dengan props: title, badge, columns, data, type('emas'|'saham'|'reksa').
+   - NAB Saat Ini diambil dari item.current_nab (sudah ada di report)
+   - P&L sudah dihitung di backend, langsung tampilkan item.pl dan item.pl_pct
 ```
 
 ---
@@ -318,29 +330,19 @@ Layout:
 
 1. 3 StatCard: Prioritas Tinggi (merah), Rebalance (kuning), Total Sinyal
 
-2. Empty state jika signals.length === 0:
-   - Icon besar ✅, heading "Semua Posisi Aman"
-   - Subtext: "Analyst akan kirim notifikasi bila ada pergerakan"
+2. Empty state jika signals.length === 0
 
 3. List sinyal (urut: critical → high → medium → normal)
    Per sinyal card:
-   - Border kiri: critical=var(--danger), high=var(--orange), medium=var(--warn)
-   - Icon sesuai type: BUY=💚, AVG_DOWN=📉, SELL=🔴, STOPLOSS=🚨, REBALANCE=⚖️
-   - Title: "[TYPE] — [ASET]" bold
-   - Body: alasan lengkap, font-mono kecil
-   - Meta: priority badge + timestamp WIB
-   - Tombol "💹 Eksekusi" untuk BUY/AVG_DOWN:
-     * Buka TransactionForm modal dengan data pre-filled
-     * Tampilkan saran lot menggunakan suggestLot() dari calculator.js
-     * Harga pre-filled dari market_price saham tersebut
+   - Border kiri sesuai priority
+   - Tombol "💹 Eksekusi" untuk BUY/AVG_DOWN → buka TransactionForm modal pre-filled
 
 4. Tombol refresh di topbar
 
 Buatkan juga `src/components/transactions/TransactionForm.vue` (modal):
 Props: prefill(Object) → { aset, aksi, harga, qty_saran }
-- Jika prefill ada → tampilkan section "Saran dari Analyst" dengan saran lot
-- Fields: Jenis Aset, Aksi, Kode/Nama, Qty (satuan dinamis), Harga
-- Preview total = qty × harga (reactive, real-time)
+- Fields: Jenis Aset, Aksi, Kode/Nama, Qty, Harga
+- Preview total = qty × harga (reactive)
 - Submit → addTransaction() dari store
 ```
 
@@ -363,35 +365,24 @@ Layout:
    - Tombol "+ Tambah [Aset]"
    - List aset cards dengan detail fields
    - Per card: tombol ✏️ Edit + 🗑 Hapus
-   - Konfirmasi hapus via modal kecil
 
 3. Tab Target Alokasi:
-   - Input slider/number per kategori (Emas/Saham/Reksa)
-   - Total harus = 100%, tampilkan warning jika tidak
-   - Preview allocation bars real-time
+   - Input number per kategori (Emas/Saham/Reksa)
+   - Total harus = 100%
+   - Key di portfolio: target_allocation.reksa (bukan reksadana!)
 
-4. Save Bar (sticky bottom, muncul jika hasChanges):
-   "⚠️ Ada perubahan belum disimpan"
-   Tombol [↩ Reset] [👁 Preview & Simpan →]
+4. Save Bar (sticky bottom, muncul jika hasChanges)
 
 Buatkan `src/components/portfolio/AssetFormModal.vue`:
-- Mode: tambah (editIndex=-1) atau edit (editIndex>=0)
+- Form Reksa: id, nama, qty_unit, avg_buy_nab, rd_code, catatan
+  * rd_code: input text, auto uppercase, placeholder "RD424"
+  * Hint: "Dari URL bibit.id/reksadana/RD424/nama-reksa"
+  * rd_code disimpan ke Firestore dan dipakai pipeline untuk auto-fetch NAB
+- Form Saham: id, nama, ticker, qty_lot, avg_buy_price, support, resistance, stop_loss, catatan
 - Form Emas: id, nama, qty_gram, avg_buy_price, catatan
-- Form Saham: id, nama, ticker(auto dari id+'.JK'), qty_lot, avg_buy_price,
-              support, resistance, stop_loss, catatan
-- Form Reksa: id, nama, qty_unit, avg_buy_nab, catatan
-- Validasi: id dan nama required, angka harus positif
-- Auto uppercase untuk id saham
 
 Buatkan `src/components/portfolio/PLPreviewModal.vue`:
-- Ringkasan perubahan (ADD/EDIT/DELETE dengan badge warna)
-- Tabel perbandingan: Sebelum → Sesudah
-  * Total Modal, Jumlah Aset, per kategori
-- Tombol "✅ Konfirmasi & Simpan" → savePortfolio()
-- Loading state saat menyimpan
-
-Gunakan usePortfolioStore() untuk semua operasi.
-Panggil markChanged() setiap ada modifikasi data.
+- Ringkasan perubahan + tombol konfirmasi simpan
 ```
 
 ---
@@ -408,28 +399,19 @@ Import: useMarketStore, useReportStore
 Layout:
 
 1. Topbar action: tombol "⟳ Manual Fetch" → runPipeline()
-   Loading state + toast sukses/error setelah selesai
 
 2. 3 StatCard: Last Fetch (timestamp), Data Sources (3), Schedule (09-16 WIB)
 
 3. Card "Data Sources & Status":
-   Setiap row: Nama | Source URL | Status Badge | Nilai Terakhir | Timestamp
    - Harga Emas: logammulia.com | OK | Rp{goldPrice}/g
-   - Harga Saham: Yahoo Finance | OK/PARTIAL | list kode saham
-   - NAB Reksa Dana: Manual | PENDING | "Update jam 16:30"
-   Status badge: health-ok(hijau) / health-warn(kuning) / health-err(merah)
+   - Harga Saham: Yahoo Finance | OK/PARTIAL
+   - NAB Reksa Dana: Bibit API (simulations) | OK | auto-update tiap pipeline
+     * Endpoint: api.bibit.id/products/{RD_CODE}/simulations?range=120
+     * NAB = elemen terakhir array data
 
 4. Card "Raw JSON Output":
-   - Tampilkan market data dari useMarketStore sebagai JSON
-   - Syntax highlighting sederhana:
-     * Key string: warna var(--blue)
-     * Value string: warna var(--warn)
-     * Value number: warna var(--green)
-     * Null/boolean: warna var(--orange)
-   - Implementasi highlighting via regex replace + span
-   - Max height 400px dengan overflow-y scroll
-
-Font-mono untuk semua data teknis.
+   - JSON syntax highlighting
+   - Max height 400px dengan scroll
 ```
 
 ---
@@ -445,31 +427,11 @@ Import: useReportStore
 
 Layout:
 
-1. 3 StatCard: Rules Aktif, Sinyal Terpicu, Engine Status (AKTIF/hijau)
+1. 3 StatCard: Rules Aktif, Sinyal Terpicu, Engine Status
 
 2. Grid 2 kolom:
-
-   Kiri — "Aturan S/R & Status":
-   Per saham dari report.saham.items:
-   - Support: status TRIGGERED(merah)/APPROACHING(kuning)/AMAN(hijau)
-   - Resistance: sama
-   - Stop Loss: sama
-   Format baris: "[BBCA Support Rp5.800] ← [Rp6.150] → [AMAN ✓]"
-
-   Kanan — "ROI Proyek":
-   List items:
-   - 💰 Hemat langganan: +Rp75rb/bln
-   - ⏱ Waktu tersimpan: ~4 jam/minggu
-   - 📊 Keputusan data: 100%
-   - 🚫 FOMO tercegah: {signals.length}× bulan ini
-   
-   Highlight box di bawah:
-   Background rgba(0,229,160,0.05), border rgba(0,229,160,0.15):
-   - Label: "PROJECTED ANNUAL SAVING" (monospace kecil)
-   - Value: "Rp 900.000+" (besar, --accent)
-   - Sub: "Belum termasuk profit optimization"
-
-Hitung rulesCount = saham.items.length × 3 + 1 (alokasi rule).
+   Kiri — "Aturan S/R & Status" per saham
+   Kanan — "ROI Proyek" dengan highlight box projected saving
 ```
 
 ---
@@ -481,25 +443,13 @@ Hitung rulesCount = saham.items.length × 3 + 1 (alokasi rule).
 
 Buatkan `src/views/TransactionsView.vue`.
 
-Import: useTransactionsStore, useReportStore (untuk summary total aset)
+Import: useTransactionsStore, useReportStore
 Fetch transactions saat mounted.
 
 Layout:
-
-1. Topbar action: tombol "+ Transaksi Baru" → buka modal
-
-2. Tabel riwayat:
-   Columns: Tanggal | Aset | Aksi | Qty | Harga | Total | Catatan
-   - Tanggal: format "12 Mei 2026"
-   - Aksi: SignalBadge style (BELI=hijau, JUAL=merah)
-   - Total = qty × harga, format Rupiah
-   - Semua angka: font-mono, tabular-nums
-
+1. Topbar action: tombol "+ Transaksi Baru"
+2. Tabel: Tanggal | Aset | Aksi | Qty | Harga | Total | Catatan
 3. Empty state jika belum ada transaksi
-
-Modal TransactionForm (reuse dari komponen yang sudah dibuat di Prompt 07).
-
-Fetch ulang setelah berhasil tambah transaksi.
 ```
 
 ---
@@ -525,6 +475,8 @@ Tolong:
    - Gunakan CSS variables
    - <script setup> syntax
    - Font JetBrains Mono untuk angka
+   - alokasi.rekomendasi adalah array object {action, asset, actual, target}
+   - target_allocation pakai key "reksa" bukan "reksadana"
 ```
 
 ---
@@ -541,74 +493,85 @@ Aturan mobile:
 - Sidebar → bottom navigation bar (5 item utama: Dashboard, Portfolio, Alerts, Settings, More)
 - Grid 4 kolom → 2 kolom
 - Grid 2/3 + 1/3 → 1 kolom (stacked)
-- Tabel saham → card layout (setiap row jadi card dengan semua info)
-- StatCard value font-size lebih kecil tapi tetap terbaca
+- Tabel saham/reksa → card layout
 - Touch target minimum 44px height
-- PriceSparkline tetap tampil (perkecil jika perlu)
-- Dark theme dan CSS variables tetap sama
 - AppSidebar hide di mobile, ganti dengan AppBottomNav
 ```
 
 ---
 
-## 🚢 PROMPT 14 — DEPLOY PREPARATION
+## 🚢 PROMPT 14 — DEPLOY
 
 ```
 @PROJECT_CONTEXT.md
 
-Persiapkan project untuk deployment:
+Build dan deploy dashboard ke STB:
 
-1. Update `vite.config.js`:
-   - Lazy loading per route (dynamic import)
-   - Build output: dist/
-   - No sourcemap production
-   - Asset inline limit: 4096
+1. `deploy.sh` (laptop):
+   - npm run build → cek exit code
+   - git add -A → commit "deploy: $(date)" → push origin main
 
-2. `deploy.sh` (laptop):
-   #!/bin/bash
-   - Jalankan npm run build
-   - Cek apakah build berhasil (exit code)
-   - git add -A
-   - git commit -m "deploy: $(date '+%Y-%m-%d %H:%M') WIB"
-   - git push origin main
-   - Echo instruksi untuk STB
+2. STB apply update:
+   /home/sidrive/deploy.sh → git pull → pm2 restart omni-dashboard
 
-3. Pastikan `.gitignore` tidak mengabaikan dist/
-   - Tambahkan comment: "# dist/ sengaja TIDAK di-ignore (STB pull langsung)"
+3. Pastikan dist/ tidak di-ignore di .gitignore
+```
 
-4. `index.html`:
-   - Tambahkan loading screen minimal saat Vue belum mount
-   - Background #0a0c10, text "Loading..." dengan font-mono --accent
+---
 
-5. README.md singkat:
-   - Tech stack
-   - Cara develop: npm run dev
-   - Cara deploy: ./deploy.sh
-   - Cara update STB: /home/sidrive/deploy.sh
+## 🏦 PROMPT 15 — UPDATE REKSA DANA (FIELD rd_code)
+
+```
+@PROJECT_CONTEXT.md
+
+Update `src/components/portfolio/AssetFormModal.vue` untuk menambahkan
+field rd_code pada form reksa dana.
+
+Konteks:
+- rd_code dipakai pipeline Python untuk auto-fetch NAB dari Bibit
+- Format: "RD424" — dari URL bibit.id/reksadana/RD424/nama-reksa
+- Harus disimpan ke Firestore bersama data portfolio lainnya
+
+Perubahan yang dibutuhkan:
+
+1. emptyForm() — tambah field:
+   rd_code: ''
+
+2. submit() block reksa — tambah ke data object:
+   rd_code: form.rd_code?.trim().toUpperCase() || ''
+
+3. Template — tambah input field setelah "NAB Saat Ini":
+   - Label: "Kode Bibit" dengan hint "(untuk auto-fetch NAB)"
+   - Input: v-model="form.rd_code", auto uppercase, placeholder "RD424"
+   - Hint text: "Dari URL bibit.id/reksadana/RD424/nama-reksa"
+
+Jangan ubah field lain, hanya tambahkan rd_code.
 ```
 
 ---
 
 ## 💡 TIPS WORKFLOW CURSOR + CLAUDE
 
-### Urutan Development yang Disarankan:
+### Urutan Development:
+
 ```
-Prompt 01 → Fondasi (main, router, api, utils)
-Prompt 02 → Stores (Pinia)
-Prompt 03 → Layout (App, Sidebar, Topbar, Toast)
-Prompt 04 → UI Primitives (StatCard, SignalBadge, Sparkline)
-Prompt 05 → Dashboard View ← test pertama kali di browser
-Prompt 06 → Portfolio View
-Prompt 07 → Alerts View + TransactionForm
-Prompt 08 → Settings View (CRUD)
-Prompt 09 → Scavenger View
-Prompt 10 → Analyst View
-Prompt 11 → Transactions View
+Prompt 01 → Fondasi
+Prompt 02 → Stores
+Prompt 03 → Layout
+Prompt 04 → UI Primitives
+Prompt 05 → Dashboard ← test pertama
+Prompt 06 → Portfolio
+Prompt 07 → Alerts
+Prompt 08 → Settings (CRUD)
+Prompt 09 → Scavenger
+Prompt 10 → Analyst
+Prompt 11 → Transactions
 Prompt 13 → Responsive Mobile
 Prompt 14 → Deploy
 ```
 
-### Pattern untuk Setiap Komponen Baru:
+### Pattern Komponen Baru:
+
 ```
 @PROJECT_CONTEXT.md
 
@@ -618,35 +581,45 @@ Buatkan [NAMA_KOMPONEN].vue dengan spesifikasi:
 - Visual: [deskripsi tampilan]
 - Behavior: [interaksi]
 
-Gunakan:
-- CSS variables dari design system
-- JetBrains Mono untuk semua angka
-- <script setup> Composition API
-- font-variant-numeric: tabular-nums pada kolom angka
+Gunakan CSS variables, JetBrains Mono untuk angka,
+<script setup>, font-variant-numeric: tabular-nums pada tabel.
 ```
 
-### Jika Claude Generate Warna Hardcode:
+### Fix Warna Hardcode:
+
 ```
-Perbaiki komponen ini — ganti semua hardcode warna (#xxx atau rgb/rgba)
-dengan CSS variables yang sesuai dari design system PROJECT_CONTEXT.md.
+Perbaiki komponen ini — ganti semua hardcode warna
+dengan CSS variables dari design system PROJECT_CONTEXT.md.
 Contoh: #00e5a0 → var(--accent), #ff4757 → var(--danger)
 ```
 
-### Jika Ada Error API:
+### Fix Error API:
+
 ```
 @PROJECT_CONTEXT.md
 
-API call gagal dengan error: [ERROR]
-Endpoint: [METHOD] [URL]
+API call gagal: [ERROR]
+Endpoint: [METHOD URL]
 Store: [NAMA STORE]
 
-Cek apakah:
-1. baseURL dari VITE_API_BASE_URL sudah benar
-2. Response unwrapping di api/index.js sudah handle error
-3. Try/catch di store sudah ada
+Cek: baseURL dari VITE_API_BASE_URL, response unwrapping,
+try/catch di store, struktur response di PROJECT_CONTEXT.md.
+```
+
+### Fix Data Reksa Dana:
+
+```
+@PROJECT_CONTEXT.md
+
+Masalah data reksa dana:
+- current_nab dibaca dari report.reksadana.items[].current_nab (bukan nab)
+- P&L sudah dihitung backend: item.pl, item.pl_pct
+- alokasi.rekomendasi = array object {action, asset, actual, target}
+- target_allocation.reksa (bukan reksadana)
+- rd_code di portfolio dipakai pipeline untuk auto-fetch NAB dari Bibit
 ```
 
 ---
 
-*Selalu update PROJECT_CONTEXT.md jika ada perubahan arsitektur atau design system*
-*Gunakan prompt secara berurutan untuk hasil terbaik*
+_Selalu update PROJECT_CONTEXT.md jika ada perubahan arsitektur_
+_Last updated: 2026-05-30_
