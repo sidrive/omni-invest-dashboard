@@ -25,6 +25,12 @@ export const useReportStore = defineStore('report', () => {
     signals.value.filter((s) => s.priority === 'critical' || s.priority === 'high'),
   )
 
+  const valasSummary = computed(() =>
+    report.value?.valas?.summary ?? { total_modal: 0, total_nilai: 0, total_pl: 0, total_pl_pct: 0 },
+  )
+
+  const valasItems = computed(() => report.value?.valas?.items ?? [])
+
   // ── Actions ──
   async function fetchReport() {
     loading.value = true
@@ -84,6 +90,8 @@ export const useReportStore = defineStore('report', () => {
     signalCount,
     criticalSignals,
     highPrioritySignals,
+    valasSummary,
+    valasItems,
     fetchReport,
     runPipeline,
   }

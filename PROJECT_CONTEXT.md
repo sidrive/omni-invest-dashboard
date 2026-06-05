@@ -73,8 +73,10 @@ omni-invest-dashboard/
 │   │   │   └── PriceSparkline.vue
 │   │   ├── portfolio/
 │   │   │   ├── AssetTable.vue
-│   │   │   ├── AssetFormModal.vue   ← ada field rd_code untuk reksa dana
-│   │   │   └── PLPreviewModal.vue
+│   │   │   ├── AssetFormModal.vue   ← ada field rd_code untuk reksa dana + helper hitung avg_buy_price emas
+│   │   │   ├── PLPreviewModal.vue   ← deteksi perubahan emas/saham/reksa/valas
+│   │   │   ├── ValasSection.vue     ← tabel posisi valas (dipakai di PortfolioView)
+│   │   │   └── ValasFormModal.vue   ← form tambah/edit posisi valas (dipakai di SettingsView)
 │   │   └── transactions/
 │   │       └── TransactionForm.vue
 │   ├── router/index.js
@@ -369,7 +371,13 @@ Base URL: `import.meta.env.VITE_API_BASE_URL`
   },
   emas:      { items: [...], total_modal, total_nilai },
   saham:     { items: [...], total_modal, total_nilai },
-  reksadana: { items: [{ id, nama, qty_unit, avg_nab, current_nab, modal, nilai_pasar, pl, pl_pct, signal }] }
+  reksadana: { items: [{ id, nama, qty_unit, avg_nab, current_nab, modal, nilai_pasar, pl, pl_pct, signal }] },
+  valas: {
+    summary: { total_modal, total_nilai, total_pl, total_pl_pct },
+    items: [{ id, code, nama, qty_unit, avg_buy_rate, current_rate, change_pct,
+               modal, nilai_pasar, pl, pl_pct, signal }]
+    // signal valas: BUY | HOLD | SELL_PARTIAL | STOPLOSS | DATA_ERROR
+  }
 }
 
 // GET /api/portfolio → res.data
@@ -377,6 +385,11 @@ Base URL: `import.meta.env.VITE_API_BASE_URL`
   emas:      [{ id, nama, qty_gram, avg_buy_price, catatan }],
   saham:     [{ id, ticker, nama, qty_lot, avg_buy_price, support, resistance, stop_loss, catatan }],
   reksadana: [{ id, nama, qty_unit, avg_buy_nab, rd_code, catatan }],  // rd_code untuk auto-fetch NAB
+  valas:     [{ id, code, nama, qty_unit, avg_buy_rate, catatan }],
+             // id: "{code}_{4-digit-ts}", e.g. "usd_1234"
+             // code: "USD"|"SGD"|"EUR"|"JPY"
+             // avg_buy_rate: kurs IDR saat beli (bukan total modal!)
+             // qty_unit: jumlah unit valas (JPY tanpa desimal, lainnya 2 desimal)
   target_allocation: { emas, saham, reksa }  // key reksa (bukan reksadana)!
 }
 ```
@@ -406,17 +419,22 @@ Base URL: `import.meta.env.VITE_API_BASE_URL`
 // market.js
 state:   { market: null, lastSync: '--', loading: false, goldHistory: [] }
 actions: fetchMarket(), fetchGoldHistory()
-getters: goldPrice, stockList, goldSparklineData, goldChangePct
+getters: goldPrice, stockList, goldSparklineData, goldChangePct,
+         valasRates  // → market?.valas?.rates ?? {}
+                     // format: { USD: { rate, change_pct, status, symbol }, ... }
 
 // portfolio.js
 state:   { portfolio: null, originalPortfolio: null, hasChanges: false, loading: false, saving: false }
 actions: fetchPortfolio(), savePortfolio(data)
-getters: reksaList, sahamList, emasList
+getters: emasList, sahamList, reksaList,
+         valasList  // → portfolio?.valas ?? []
 
 // report.js
 state:   { report: null, loading: false, running: false }
 actions: fetchReport(), runPipeline()
-getters: signals, summary, allokasi, highPrioritySignals, criticalSignals
+getters: signals, summary, allokasi, highPrioritySignals, criticalSignals,
+         valasSummary,  // → report?.valas?.summary ?? { total_modal:0, total_nilai:0, total_pl:0, total_pl_pct:0 }
+         valasItems     // → report?.valas?.items ?? []
 
 // transactions.js
 state:   { transactions: [], loading: false }
@@ -472,24 +490,31 @@ VITE_API_BASE_URL=http://192.168.192.81:4500/api
 
 ### Signal Logic
 
-| Signal    | Kondisi                            | Priority |
-| --------- | ---------------------------------- | -------- |
-| BUY       | harga ≤ support                    | high     |
-| AVG_DOWN  | harga turun ≥ 5% dari avg buy      | high     |
-| SELL      | harga ≥ resistance                 | medium   |
-| STOPLOSS  | harga ≤ stop loss                  | critical |
-| REBALANCE | alokasi emas > GOLD_MAX_ALLOCATION | medium   |
-| DCA       | reksa dana selalu                  | normal   |
+| Signal       | Kondisi                            | Priority | Aset     |
+| ------------ | ---------------------------------- | -------- | -------- |
+| BUY          | harga ≤ support                    | high     | saham    |
+| AVG_DOWN     | harga turun ≥ 5% dari avg buy      | high     | saham    |
+| SELL         | harga ≥ resistance                 | medium   | saham    |
+| STOPLOSS     | harga ≤ stop loss                  | critical | saham    |
+| REBALANCE    | alokasi emas > GOLD_MAX_ALLOCATION | medium   | emas     |
+| DCA          | reksa dana selalu                  | normal   | reksa    |
+| SELL_PARTIAL | kurs saat ini ≥ threshold profit   | medium   | valas    |
+| DATA_ERROR   | gagal fetch kurs dari API          | normal   | valas    |
 
 ### Kalkulasi P&L
 
 ```
 Saham:     modal = qty_lot × 100 × avg_buy_price
-Emas:      modal = qty_gram × avg_buy_price
+Emas:      modal = qty_gram × avg_buy_price    ← avg_buy_price = HARGA PER GRAM, bukan total modal!
 Reksadana: modal = qty_unit × avg_buy_nab
+Valas:     modal = qty_unit × avg_buy_rate     ← avg_buy_rate = kurs IDR saat beli
 PL:        nilai_pasar - modal
 PL%:       (PL / modal) × 100
 ```
+
+**Catatan penting emas:** `avg_buy_price` adalah harga per gram (Rp/gram).
+Jika user tahu total modal, konversi dulu: `avg_buy_price = total_modal / qty_gram`.
+AssetFormModal sudah ada helper untuk ini.
 
 ### Rekomendasi Rebalance
 
@@ -499,6 +524,16 @@ Saham   : aktual < target.saham - 5       → TAMBAH
 Reksa   : aktual > target.reksa + 5       → KURANG
 Reksa   : aktual < target.reksa - 5       → TAMBAH
 target  : dari portfolio.target_allocation (Firestore), key = "reksa"
+```
+
+### Valas — Mata Uang yang Didukung
+
+```javascript
+const FLAG_MAP = { USD: '🇺🇸', SGD: '🇸🇬', EUR: '🇪🇺', JPY: '🇯🇵' }
+// JPY: qty tanpa desimal, step 100
+// Lainnya: qty 2 desimal, step 0.01
+// Simbol: USD→$, SGD→S$, EUR→€, JPY→¥
+// ID format: "{code.toLowerCase()}_{4-digit-timestamp}" cth: "usd_1234"
 ```
 
 ### Saran Lot (One-Tap Eksekusi)
@@ -555,12 +590,18 @@ generateSparklineData(changePct) // array 7 titik simulasi
 20. **target_allocation** di portfolio pakai key `reksa` (bukan `reksadana`)
 21. **rd_code** di reksa dana portfolio — dari URL `bibit.id/reksadana/RD424/...`, dipakai pipeline untuk auto-fetch NAB
 22. **current_nab** reksa dana — field yang dibaca analyst engine, bukan `nab`
+23. **savePortfolio payload WAJIB include SEMUA key** — jika ada aset baru (valas dll), tambahkan ke payload di `portfolio.js → savePortfolio()`, jika tidak data akan hilang saat save
+24. **localPortfolio di SettingsView WAJIB include semua key** — `{ emas, saham, reksadana, target_allocation, valas, ... }` — key yang tidak ada akan di-overwrite kosong saat simpan
+25. **avg_buy_price emas = harga per gram** — BUKAN total modal. Jangan biarkan user salah input. AssetFormModal sudah ada helper konversi total modal → per gram
+26. **PLPreviewModal deteksi perubahan** — saat menambah aset baru, tambahkan `detectChanges` untuk tipe baru, tambahkan ke `allChanges`, dan tambahkan baris di tabel perbandingan
+27. **SignalBadge map** — saat ada signal type baru dari backend, tambahkan ke map di `signalClass()` di SignalBadge.vue, jika tidak akan fallback ke styling 'hold' (kuning)
 
 ---
 
-_Last updated: 2026-05-30_
+_Last updated: 2026-06-05_
 _Design: "Deep Space & Neon Accents" — Command Center Dashboard_
 _Stack: Vue 3 + Vite + Pinia + Vue Router + Axios + Chart.js_
 _Font: Inter (UI) + JetBrains Mono (data angka)_
 _Backend: Python Flask + Firebase Firestore + FCM_
 _Server: Armbian S905x STB — IP: 192.168.192.81_
+_Fitur aktif: Emas, Saham, Reksa Dana, Valas (USD/SGD/EUR/JPY)_

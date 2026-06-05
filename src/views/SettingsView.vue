@@ -8,17 +8,61 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import StockSearchInput from '@/components/ui/StockSearchInput.vue'
 import AssetFormModal from '@/components/portfolio/AssetFormModal.vue'
 import PLPreviewModal from '@/components/portfolio/PLPreviewModal.vue'
+import ValasFormModal from '@/components/portfolio/ValasFormModal.vue'
+import { useMarketStore } from '@/stores/market'
 import { formatRupiah, formatJuta } from '@/utils/formatters'
 
 const portfolioStore = usePortfolioStore()
 const watchlistStore = useWatchlistStore()
+const marketStore    = useMarketStore()
 const { showToast } = useToast()
+
+// ── Valas ─────────────────────────────────────────────────────
+const valasRates     = computed(() => marketStore.valasRates)
+const showValasModal = ref(false)
+const editValasItem  = ref(null)
+
+const FLAG_MAP = { USD: '🇺🇸', SGD: '🇸🇬', EUR: '🇪🇺', JPY: '🇯🇵' }
+const flagEmoji = (code) => FLAG_MAP[code] ?? '🏳️'
+
+function openAddValas() {
+  editValasItem.value  = null
+  showValasModal.value = true
+}
+
+function openEditValas(item) {
+  editValasItem.value  = { ...item }
+  showValasModal.value = true
+}
+
+function deleteValas(id) {
+  const valas = portfolioStore.portfolio?.valas
+  if (!valas) return
+  const idx = valas.findIndex((i) => i.id === id)
+  if (idx !== -1) valas.splice(idx, 1)
+  portfolioStore.markChanged()
+}
+
+function handleValasSave(item) {
+  if (!portfolioStore.portfolio) return
+  if (!portfolioStore.portfolio.valas) portfolioStore.portfolio.valas = []
+  const valas = portfolioStore.portfolio.valas
+  const idx   = valas.findIndex((i) => i.id === item.id)
+  if (idx !== -1) {
+    valas.splice(idx, 1, item)
+  } else {
+    valas.push(item)
+  }
+  portfolioStore.markChanged()
+  showValasModal.value = false
+}
 
 // ── Tabs ──────────────────────────────────────────────────────
 const TABS = [
-  { key: 'emas',   label: '🥇 Emas' },
-  { key: 'saham',  label: '📈 Saham' },
-  { key: 'reksa',  label: '🏦 Reksa Dana' },
+  { key: 'emas',      label: '🥇 Emas' },
+  { key: 'saham',     label: '📈 Saham' },
+  { key: 'reksa',     label: '🏦 Reksa Dana' },
+  { key: 'valas',     label: '💱 Valas' },
   { key: 'target',    label: '⚖️ Target Alokasi' },
   { key: 'watchlist', label: '📡 Watchlist' },
 ]
@@ -59,6 +103,7 @@ const localPortfolio = computed(() => ({
   saham:             localSaham.value,
   reksadana:         localReksa.value,
   target_allocation: localTarget.value,
+  valas:             portfolioStore.portfolio?.valas ?? [],
 }))
 
 // ── Target allocation ─────────────────────────────────────────
@@ -440,6 +485,42 @@ async function saveWatchlistChanges() {
         </div>
       </div>
 
+      <!-- ── VALAS ── -->
+      <div v-else-if="activeTab === 'valas'" class="tab-content">
+        <div class="panel-header">
+          <h3 class="panel-title">💱 Posisi Valas</h3>
+          <button class="btn-add" @click="openAddValas">＋ Tambah</button>
+        </div>
+
+        <div v-if="!portfolioStore.valasList.length" class="empty-panel">
+          <span class="empty-panel-icon">💱</span>
+          <span>Belum ada posisi valas ditambahkan</span>
+        </div>
+
+        <div v-else class="asset-cards">
+          <div v-for="item in portfolioStore.valasList" :key="item.id" class="valas-card">
+            <div class="card-left">
+              <span class="card-flag">{{ flagEmoji(item.code) }}</span>
+              <div>
+                <div class="card-code mono">{{ item.code }}</div>
+                <div class="card-subtext">{{ item.nama }}</div>
+              </div>
+            </div>
+            <div class="card-center">
+              <div class="mono">
+                {{ (item.qty_unit ?? 0).toLocaleString('id-ID', { maximumFractionDigits: 2 }) }}
+                <span class="card-unit">{{ item.code }}</span>
+              </div>
+              <div class="card-subtext mono">@ {{ formatRupiah(item.avg_buy_rate) }}/{{ item.code }}</div>
+            </div>
+            <div class="card-actions">
+              <button class="btn-icon btn-edit" @click="openEditValas(item)">✏️</button>
+              <button class="btn-icon btn-del"  @click="deleteValas(item.id)">🗑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── TARGET ALOKASI ── -->
       <div v-else-if="activeTab === 'target'" class="tab-content">
         <div class="target-section">
@@ -750,6 +831,15 @@ async function saveWatchlistChanges() {
       :after="localPortfolio"
       :original-portfolio="portfolioStore.originalPortfolio"
       @saved="onPreviewSaved"
+    />
+
+    <!-- ── ValasFormModal ── -->
+    <ValasFormModal
+      v-if="showValasModal"
+      :edit-item="editValasItem"
+      :valas-rates="valasRates"
+      @close="showValasModal = false"
+      @save="handleValasSave"
     />
 
   </div>
@@ -1406,6 +1496,100 @@ async function saveWatchlistChanges() {
 }
 .btn-save-wl:hover:not(:disabled) { background: rgba(0, 132, 255, 0.2); box-shadow: var(--glow-blue); }
 .btn-save-wl:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Valas tab ── */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.empty-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 56px;
+  background: var(--bg3);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text3);
+  font-size: 13px;
+}
+.empty-panel-icon { font-size: 22px; }
+
+.asset-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.valas-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.valas-card:hover { border-color: rgba(0, 229, 160, 0.2); }
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 140px;
+}
+.card-flag { font-size: 22px; line-height: 1; }
+.card-code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.5px;
+}
+.card-subtext {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+.card-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.card-center .mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--text);
+}
+.card-unit {
+  font-size: 10px;
+  color: var(--text3);
+  margin-left: 3px;
+}
+.card-center .card-subtext {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
 
 /* ── Responsive ── */
 @media (max-width: 768px) {

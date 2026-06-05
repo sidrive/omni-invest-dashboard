@@ -2,7 +2,7 @@
 
 > Kumpulan prompt siap pakai di Cursor editor dengan Claude extension
 > Selalu sertakan PROJECT_CONTEXT.md sebagai context sebelum menjalankan prompt ini
-> Last updated: 2026-05-30
+> Last updated: 2026-06-05
 
 ---
 
@@ -102,6 +102,7 @@ Buatkan semua 4 Pinia stores. Setiap store harus:
    - stockList → array dari market.saham.stocks
    - goldSparklineData → array harga dari goldHistory
    - goldChangePct → perubahan harga emas hari ini
+   - valasRates → market?.valas?.rates ?? {}
 
 2. `src/stores/portfolio.js`
    State: portfolio(null), originalPortfolio(null), hasChanges(false),
@@ -110,7 +111,10 @@ Buatkan semua 4 Pinia stores. Setiap store harus:
    - fetchPortfolio() → GET /api/portfolio
    - savePortfolio(data) → POST /api/portfolio, reset hasChanges
    - markChanged() → set hasChanges = true
-   Getters: totalModal, allItemsCount, sahamList, emasList, reksaList
+   - resetChanges() → set hasChanges = false
+   Getters:
+   - totalModal, allItemsCount, sahamList, emasList, reksaList
+   - valasList → portfolio?.valas ?? []
 
 3. `src/stores/report.js`
    State: report(null), loading(false), running(false), error(null)
@@ -124,6 +128,8 @@ Buatkan semua 4 Pinia stores. Setiap store harus:
    - criticalSignals → signals filter priority==='critical'
    - highPrioritySignals → signals filter critical/high
    - signalCount → signals.length
+   - valasSummary → report?.valas?.summary ?? { total_modal:0, total_nilai:0, total_pl:0, total_pl_pct:0 }
+   - valasItems   → report?.valas?.items ?? []
 
 4. `src/stores/transactions.js`
    State: transactions([]), loading(false), error(null)
@@ -202,6 +208,7 @@ Buatkan komponen UI primitif yang dipakai di semua halaman.
    - Setiap badge punya box-shadow glow tipis
    - STOPLOSS punya animasi pulse-danger
    - Font: font-mono, 10px, letter-spacing 1px
+   - Tambahkan SELL_PARTIAL dan DATA_ERROR (lihat Prompt 20)
    Props: signal (String)
 
 3. `src/components/ui/RoleBadge.vue`
@@ -266,6 +273,9 @@ Layout dari atas ke bawah:
    Kanan — Live Harga Pasar:
    - Baris emas: icon + harga + status badge
    - Per saham: kode + harga + change% + PriceSparkline
+   - Sub-section kurs valas (tampil jika valasRates tidak kosong):
+     * Label "// KURS VALAS" (font-mono, 9px, --text3)
+     * Per baris: flag + CODE/IDR + harga + change_pct (▲/▼ warna)
 
 4. WORKFLOW PIPELINE VISUALIZATION
    4 node: Scavenger → Analyst → Messenger → Auditor
@@ -312,6 +322,12 @@ Layout:
    Tabel columns: Produk | Unit | Avg NAB | NAB Saat Ini | Nilai | P&L | Signal
    - NAB Saat Ini diambil dari item.current_nab (sudah ada di report)
    - P&L sudah dihitung di backend, langsung tampilkan item.pl dan item.pl_pct
+
+5. Section VALAS (tambahkan setelah reksa dana)
+   Import dan gunakan komponen ValasSection:
+   <ValasSection :items="valasItems" :summary="valasSummary" />
+   - valasItems   = computed(() => reportStore.valasItems)
+   - valasSummary = computed(() => reportStore.valasSummary)
 ```
 
 ---
@@ -359,19 +375,32 @@ Import: usePortfolioStore
 
 Layout:
 
-1. Tab navigation: 🥇 Emas | 📈 Saham | 🏦 Reksa Dana | ⚖️ Target Alokasi
+1. Tab navigation: 🥇 Emas | 📈 Saham | 🏦 Reksa Dana | 💱 Valas | ⚖️ Target Alokasi
 
 2. Per tab aset (Emas/Saham/Reksa):
    - Tombol "+ Tambah [Aset]"
    - List aset cards dengan detail fields
    - Per card: tombol ✏️ Edit + 🗑 Hapus
 
-3. Tab Target Alokasi:
+3. Tab Valas: gunakan ValasFormModal untuk add/edit
+
+4. Tab Target Alokasi:
    - Input number per kategori (Emas/Saham/Reksa)
    - Total harus = 100%
    - Key di portfolio: target_allocation.reksa (bukan reksadana!)
 
-4. Save Bar (sticky bottom, muncul jika hasChanges)
+5. Save Bar (sticky bottom, muncul jika hasChanges)
+
+PENTING — localPortfolio computed yang dikirim ke PLPreviewModal
+HARUS menyertakan semua key termasuk valas:
+const localPortfolio = computed(() => ({
+  emas:              localEmas.value,
+  saham:             localSaham.value,
+  reksadana:         localReksa.value,
+  target_allocation: localTarget.value,
+  valas:             portfolioStore.portfolio?.valas ?? [],  // ← WAJIB ADA
+}))
+Jika valas tidak disertakan, data valas akan terhapus saat save!
 
 Buatkan `src/components/portfolio/AssetFormModal.vue`:
 - Form Reksa: id, nama, qty_unit, avg_buy_nab, rd_code, catatan
@@ -477,6 +506,7 @@ Tolong:
    - Font JetBrains Mono untuk angka
    - alokasi.rekomendasi adalah array object {action, asset, actual, target}
    - target_allocation pakai key "reksa" bukan "reksadana"
+   - localPortfolio di SettingsView HARUS include key valas
 ```
 
 ---
@@ -550,6 +580,353 @@ Jangan ubah field lain, hanya tambahkan rd_code.
 
 ---
 
+## 💱 PROMPT 15.1 — VALAS: STORES UPDATE
+
+```
+@PROJECT_CONTEXT.md
+
+Update 3 Pinia stores yang sudah ada untuk support fitur Valas.
+JANGAN timpa seluruh file — hanya tambahkan getter baru di masing-masing store.
+
+1. `src/stores/report.js`
+   Tambahkan 2 getter baru di bagian getters (setelah getter yang sudah ada):
+   - valasSummary → report?.valas?.summary ?? { total_modal:0, total_nilai:0, total_pl:0, total_pl_pct:0 }
+   - valasItems   → report?.valas?.items   ?? []
+
+2. `src/stores/market.js`
+   Tambahkan 1 getter baru:
+   - valasRates → market?.valas?.rates ?? {}
+     Format rates: { USD: { rate, change_pct, status, symbol }, SGD: {...}, ... }
+
+3. `src/stores/portfolio.js`
+   Tambahkan 1 getter baru:
+   - valasList → portfolio?.valas ?? []
+
+Semua getter menggunakan optional chaining (??) agar tidak error
+jika data belum ada (portfolio lama belum punya key valas).
+```
+
+---
+
+## 💱 PROMPT 16 — VALAS: KOMPONEN BARU
+
+```
+@PROJECT_CONTEXT.md
+
+Buatkan 2 file komponen baru untuk fitur Valas.
+
+─────────────────────────────────────────────────────
+1. `src/components/portfolio/ValasSection.vue`
+─────────────────────────────────────────────────────
+Komponen tabel posisi valas, ditampilkan di PortfolioView.
+
+Props:
+- items   : Array  — dari reportStore.valasItems
+- summary : Object — dari reportStore.valasSummary
+
+Tampilan:
+- Header section: "💱 Valas" + badge jumlah posisi + total P&L di kanan
+- Empty state jika items kosong: icon 💱, teks "Belum ada posisi valas",
+  sub "Tambahkan via Settings → Valas"
+- Tabel dengan kolom:
+  Mata Uang | Qty Unit | Avg Beli | Kurs Saat Ini | Change | Nilai (IDR) | P&L | Signal
+
+Detail kolom:
+- Mata Uang: flag emoji (🇺🇸🇸🇬🇪🇺🇯🇵) + kode bold + nama kecil di bawahnya
+- Qty Unit: font-mono, JPY tanpa desimal, lainnya 2 desimal + simbol ($, S$, €, ¥)
+- Avg Beli: font-mono, --text3 (warna redup)
+- Kurs Saat Ini: font-mono
+- Change: font-mono, --green jika >=0, --red jika negatif, prefix ▲/▼
+- Nilai IDR: font-mono, formatRupiah
+- P&L: 2 baris — nilai Rupiah (atas) + persentase kecil (bawah), warna --green/--red
+- Signal: komponen SignalBadge
+
+Footer tabel: row "Total Valas" dengan total nilai + total P&L
+Responsive: sembunyikan kolom "Avg Beli" di mobile < 768px
+Semua angka: font-variant-numeric: tabular-nums
+
+─────────────────────────────────────────────────────
+2. `src/components/portfolio/ValasFormModal.vue`
+─────────────────────────────────────────────────────
+Modal form untuk tambah/edit posisi valas, dipakai di SettingsView.
+
+Props:
+- editItem   : Object|null — null = mode tambah, Object = mode edit
+- valasRates : Object      — dari marketStore.valasRates (untuk live preview kurs)
+
+Emits: close, save(item)
+
+Field form:
+- Mata Uang (select, disabled saat edit):
+  opsi: USD 🇺🇸, SGD 🇸🇬, EUR 🇪🇺, JPY 🇯🇵
+- Label / Nama (text input, placeholder "cth: USD Tabungan BCA")
+- Jumlah / qty_unit (number, step 0.01 atau 100 untuk JPY)
+- Kurs Rata-rata Beli / avg_buy_rate (number, step 1)
+  hint di bawah: tampilkan kurs saat ini dari valasRates sebagai referensi
+- Catatan (text input, opsional)
+
+Live rate banner (tampil jika valasRates tersedia):
+- Background biru subtle rgba(0,132,255,0.06)
+- Tampilkan: flag + "CODE/IDR" + harga saat ini (bold biru) + change_pct (▲/▼)
+
+P&L Preview live (tampil jika qty dan avg_buy_rate sudah diisi):
+- Modal = qty × avg_buy_rate
+- Nilai = qty × kurs_saat_ini
+- Est. P&L = Nilai - Modal (warna --green/--red)
+- Update reactive saat input berubah
+
+Validasi:
+- code: required
+- nama: required, tidak boleh kosong
+- qty_unit: harus > 0
+- avg_buy_rate: harus > 0
+Tombol simpan disabled jika validasi gagal
+
+Auto-generate id: "{code.toLowerCase()}_{4-digit-timestamp}" saat code berubah (mode tambah)
+
+Gunakan <script setup> Composition API.
+CSS variables semua, tidak ada hardcode warna.
+```
+
+---
+
+## 💱 PROMPT 17 — VALAS: UPDATE PORTFOLIO VIEW
+
+```
+@PROJECT_CONTEXT.md
+
+Update `src/views/PortfolioView.vue` — tambahkan section Valas.
+
+Yang perlu ditambahkan (JANGAN timpa seluruh file):
+
+1. Import baru di <script setup>:
+   import ValasSection from '@/components/portfolio/ValasSection.vue'
+
+2. Getter baru dari reportStore:
+   const valasItems   = computed(() => reportStore.valasItems)
+   const valasSummary = computed(() => reportStore.valasSummary)
+
+3. Di <template>, tambahkan setelah section reksa dana (</section> terakhir):
+   <ValasSection
+     :items="valasItems"
+     :summary="valasSummary"
+   />
+
+Pastikan tidak mengubah section Emas, Saham, Reksa yang sudah ada.
+```
+
+---
+
+## 💱 PROMPT 18 — VALAS: UPDATE SETTINGS VIEW
+
+```
+@PROJECT_CONTEXT.md
+
+Update `src/views/SettingsView.vue` — tambahkan tab Valas dengan CRUD lengkap.
+
+Yang perlu ditambahkan (JANGAN timpa seluruh file):
+
+1. Import baru di <script setup>:
+   import ValasFormModal from '@/components/portfolio/ValasFormModal.vue'
+   import { useMarketStore } from '@/stores/market'
+
+2. State dan computed baru:
+   const marketStore    = useMarketStore()
+   const valasRates     = computed(() => marketStore.valasRates)
+   const showValasModal = ref(false)
+   const editValasItem  = ref(null)
+
+3. Handler functions:
+   - openAddValas()  → set editValasItem=null, showValasModal=true
+   - openEditValas(item) → set editValasItem={...item}, showValasModal=true
+   - deleteValas(id) → splice dari portfolioStore.portfolio.valas, markChanged()
+   - handleValasSave(item):
+     * cari index di portfolio.valas via item.id
+     * jika ada → replace (edit), jika tidak → push (tambah baru)
+     * markChanged()
+     * showValasModal = false
+
+4. PENTING — pastikan localPortfolio computed menyertakan valas:
+   const localPortfolio = computed(() => ({
+     emas:              localEmas.value,
+     saham:             localSaham.value,
+     reksadana:         localReksa.value,
+     target_allocation: localTarget.value,
+     valas:             portfolioStore.portfolio?.valas ?? [],  // ← WAJIB
+   }))
+
+5. Di <template> — tab navigation, tambahkan tombol tab baru:
+   <button class="tab-btn" :class="{ active: activeTab === 'valas' }" @click="activeTab = 'valas'">
+     💱 Valas
+   </button>
+
+6. Di <template> — panel tab Valas, tambahkan setelah panel reksa:
+   (lihat implementasi lengkap di SettingsView yang sudah ada)
+
+7. Di <template> — tambahkan modal di paling bawah sebelum </template>:
+   <ValasFormModal
+     v-if="showValasModal"
+     :edit-item="editValasItem"
+     :valas-rates="valasRates"
+     @close="showValasModal = false"
+     @save="handleValasSave"
+   />
+
+Helper function yang perlu ditambahkan di <script setup>:
+const FLAG_MAP = { USD: '🇺🇸', SGD: '🇸🇬', EUR: '🇪🇺', JPY: '🇯🇵' }
+const flagEmoji = (code) => FLAG_MAP[code] ?? '🏳️'
+
+Jangan ubah tab Emas, Saham, Reksa Dana, dan Target Alokasi yang sudah ada.
+```
+
+---
+
+## 💱 PROMPT 19 — VALAS: UPDATE DASHBOARD VIEW
+
+```
+@PROJECT_CONTEXT.md
+
+Update `src/views/DashboardView.vue` — tambahkan StatCard Valas dan
+kurs valas di panel Live Harga Pasar.
+
+Yang perlu ditambahkan (JANGAN timpa seluruh file):
+
+1. Getter baru dari store:
+   const valasSummary = computed(() => reportStore.valasSummary)
+   const valasRates   = computed(() => marketStore.valasRates)
+
+2. Di grid StatCard (setelah StatCard reksa atau alokasi emas):
+   Tambahkan StatCard valas — hanya tampil jika ada posisi (total_nilai > 0):
+
+   <StatCard
+     v-if="valasSummary.total_nilai > 0"
+     label="VALAS"
+     :value="formatJuta(valasSummary.total_nilai)"
+     prefix="Rp"
+     :change="formatPct(valasSummary.total_pl_pct)"
+     change-label="floating"
+     :is-positive="valasSummary.total_pl >= 0"
+     variant="blue"
+   />
+
+3. Di panel "Live Harga Pasar" (kanan, setelah list saham):
+   Tambahkan sub-section kurs valas:
+
+   <div v-if="Object.keys(valasRates).length" class="market-subsection">
+     <div class="subsection-label">// KURS VALAS</div>
+     <div v-for="(data, code) in valasRates" :key="code" class="valas-rate-row">
+       <span class="rate-currency mono">{{ flagEmoji(code) }} {{ code }}/IDR</span>
+       <span class="rate-value mono">{{ formatRupiah(data.rate) }}</span>
+       <span class="rate-change mono" :class="data.change_pct >= 0 ? 'text-green' : 'text-red'">
+         {{ data.change_pct >= 0 ? '▲' : '▼' }}{{ Math.abs(data.change_pct).toFixed(2) }}%
+       </span>
+     </div>
+   </div>
+
+Jangan ubah bagian lain dari DashboardView.
+```
+
+---
+
+## 💱 PROMPT 20 — VALAS: SIGNAL BADGE UPDATE
+
+```
+@PROJECT_CONTEXT.md
+
+Update `src/components/ui/SignalBadge.vue` — tambahkan styling
+untuk 2 signal baru yang dihasilkan analyst valas:
+
+Signal baru yang perlu ditambahkan:
+- SELL_PARTIAL → styling mirip SELL tapi lebih redup
+  background: rgba(255,71,87,0.08)
+  color: #ff4757
+  border: 1px solid rgba(255,71,87,0.3)
+  box-shadow: 0 0 6px rgba(255,71,87,0.15)
+
+- DATA_ERROR → styling warning oranye
+  background: rgba(255,107,53,0.1)
+  color: #ff6b35
+  border: 1px solid rgba(255,107,53,0.35)
+
+Tambahkan hanya 2 class baru ini ke dalam <style> yang sudah ada.
+Jangan ubah styling signal lainnya (BUY, SELL, HOLD, DCA, STOPLOSS, AVG_DOWN).
+```
+
+---
+
+## 🐛 PROMPT 21 — FIX: AVG BUY PRICE EMAS (HARGA PER GRAM vs TOTAL MODAL)
+
+```
+@PROJECT_CONTEXT.md
+
+PENTING — Perbedaan interpretasi avg_buy_price untuk emas:
+
+Di Omni-Invest, avg_buy_price emas diinterpretasikan sebagai HARGA PER GRAM.
+Kalkulasi modal: modal = qty_gram × avg_buy_price
+
+Jika user membeli emas di platform seperti Bareksa/Treasury yang menampilkan
+"Nilai Semula" (total modal), user harus mengonversinya dulu:
+
+avg_buy_price (per gram) = total_modal / qty_gram
+Contoh: total_modal Rp3.000.000 / 1.5848 gram = Rp1.893.143/gram
+
+Tambahkan hint text di form input avg_buy_price emas di AssetFormModal.vue:
+- Di bawah input avg_buy_price, tambahkan hint:
+  "Harga per gram. Jika tahu total modal: bagi total modal ÷ jumlah gram"
+- Tambahkan helper input opsional "Hitung dari Total Modal":
+  * Input: total_modal (number)
+  * Otomatis isi avg_buy_price = total_modal / qty_gram saat diisi
+  * Label: "Atau hitung dari total modal (opsional)"
+  * Hanya tampil jika qty_gram sudah diisi
+
+Ini mencegah user salah input total modal sebagai harga per gram.
+```
+
+---
+
+## 🐛 PROMPT 22 — FIX: PARTIAL SAVE PORTFOLIO (DATA HILANG SAAT SIMPAN)
+
+```
+@PROJECT_CONTEXT.md
+
+BUG KRITIS yang sudah pernah terjadi: data valas (atau aset lain) hilang
+saat user menyimpan perubahan dari tab lain di SettingsView.
+
+Root cause: localPortfolio computed tidak menyertakan semua key portfolio.
+
+AUDIT CHECKLIST — pastikan hal berikut di SettingsView.vue:
+
+1. localPortfolio computed HARUS menyertakan SEMUA key:
+   const localPortfolio = computed(() => ({
+     emas:              localEmas.value,
+     saham:             localSaham.value,
+     reksadana:         localReksa.value,
+     target_allocation: localTarget.value,
+     valas:             portfolioStore.portfolio?.valas ?? [],  // ← sering ketinggalan!
+   }))
+
+2. PLPreviewModal menerima prop :after="localPortfolio" — pastikan
+   modal ini meneruskan SELURUH object ke savePortfolio(), bukan hanya
+   field yang berubah.
+
+3. Saat deleteValas() / handleValasSave() — pastikan markChanged() dipanggil
+   agar save bar muncul dan user tahu ada perubahan pending.
+
+4. Saat resetAll() — pastikan populateLocal() juga me-reset state valas
+   dari portfolioStore.portfolio.valas.
+
+Jika ditemukan key yang hilang dari localPortfolio, tambahkan segera.
+Test: edit emas → simpan → cek apakah valas masih ada di Firestore.
+```
+
+---
+
+_Urutan eksekusi untuk fitur Valas:_
+_Prompt 15.1 → Prompt 16 → Prompt 17 → Prompt 18 → Prompt 19 → Prompt 20_
+_Setelah selesai semua: npm run build && ./deploy.sh_
+
+---
+
 ## 💡 TIPS WORKFLOW CURSOR + CLAUDE
 
 ### Urutan Development:
@@ -619,7 +996,37 @@ Masalah data reksa dana:
 - rd_code di portfolio dipakai pipeline untuk auto-fetch NAB dari Bibit
 ```
 
+### Fix Data Emas (avg_buy_price):
+
+```
+@PROJECT_CONTEXT.md
+
+avg_buy_price emas = HARGA PER GRAM, bukan total modal.
+Jika platform (Bareksa/Treasury) menampilkan total modal:
+  avg_buy_price = total_modal / qty_gram
+Contoh: Rp3.000.000 / 1.5848g = Rp1.893.143/g
+
+Setelah update avg_buy_price, jalankan pipeline manual:
+cd /home/sidrive/omni-invest && source venv/bin/activate && python3 main.py
+P&L di PortfolioView diambil dari report (hasil pipeline), bukan real-time.
+```
+
+### Fix Data Hilang Saat Save:
+
+```
+@PROJECT_CONTEXT.md
+
+Jika data aset (valas/emas/saham/reksa) hilang setelah save di Settings:
+Root cause: localPortfolio computed di SettingsView tidak menyertakan
+semua key saat dikirim ke PLPreviewModal → savePortfolio().
+
+Cek dan pastikan localPortfolio = {
+  emas, saham, reksadana, target_allocation, valas  ← semua harus ada
+}
+Lihat Prompt 22 untuk audit checklist lengkap.
+```
+
 ---
 
 _Selalu update PROJECT_CONTEXT.md jika ada perubahan arsitektur_
-_Last updated: 2026-05-30_
+_Last updated: 2026-06-05_

@@ -38,6 +38,12 @@ const emasAktual   = computed(() => allokasi.value?.aktual?.emas ?? 0)
 const emasTarget   = computed(() => allokasi.value?.target?.emas ?? 25)
 const isEmasOver   = computed(() => emasAktual.value > emasTarget.value)
 
+const valasSummary = computed(() => reportStore.valasSummary)
+const valasRates   = computed(() => marketStore.valasRates)
+
+const FLAG_MAP  = { USD: '🇺🇸', SGD: '🇸🇬', EUR: '🇪🇺', JPY: '🇯🇵' }
+const flagEmoji = (code) => FLAG_MAP[code] ?? '🏳️'
+
 // Live market data from market store
 const emasMarket = computed(() => marketStore.market?.emas ?? null)
 const stocksData = computed(() => {
@@ -200,6 +206,16 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
           :is-positive="!isEmasOver"
           :variant="isEmasOver ? 'warn' : 'default'"
         />
+        <StatCard
+          v-if="valasSummary.total_nilai > 0"
+          label="VALAS"
+          :value="formatJuta(valasSummary.total_nilai)"
+          prefix="Rp"
+          :change="formatPct(valasSummary.total_pl_pct)"
+          change-label="floating"
+          :is-positive="valasSummary.total_pl >= 0"
+          variant="blue"
+        />
       </div>
 
       <!-- 3 ─ 2-1 grid -->
@@ -277,6 +293,25 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
             </div>
             <div class="market-sparkline">
               <PriceSparkline :change-pct="stock.change_pct ?? 0" :width="100" :height="40" />
+            </div>
+          </div>
+
+          <!-- Valas rates -->
+          <div v-if="Object.keys(valasRates).length" class="market-subsection">
+            <div class="subsection-label">// KURS VALAS</div>
+            <div
+              v-for="(data, code) in valasRates"
+              :key="code"
+              class="valas-rate-row"
+            >
+              <span class="rate-currency mono">{{ flagEmoji(code) }} {{ code }}/IDR</span>
+              <span class="rate-value mono">{{ formatRupiah(data.rate) }}</span>
+              <span
+                class="rate-change mono"
+                :class="(data.change_pct ?? 0) >= 0 ? 'text-green' : 'text-red'"
+              >
+                {{ (data.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(data.change_pct ?? 0).toFixed(2) }}%
+              </span>
             </div>
           </div>
 
@@ -695,6 +730,41 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   50%       { opacity: 0.55; }
 }
 
+/* ── Valas rates ── */
+.market-subsection { margin-top: 4px; }
+.subsection-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin: 12px 0 6px;
+}
+.valas-rate-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.valas-rate-row:last-child { border-bottom: none; }
+.rate-currency {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+.rate-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.rate-change {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Color utils (scoped) ── */
 .clr-green  { color: var(--green); }
 .clr-red    { color: var(--red); }
@@ -703,6 +773,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
 .clr-blue   { color: var(--blue); }
 .clr-accent { color: var(--accent); }
 .clr-muted  { color: var(--text3); }
+.text-green { color: var(--green); }
+.text-red   { color: var(--red); }
 
 /* ── Responsive ── */
 @media (max-width: 1100px) {

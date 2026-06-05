@@ -6,6 +6,7 @@ import StatCard from '@/components/ui/StatCard.vue'
 import RoleBadge from '@/components/ui/RoleBadge.vue'
 import SignalBadge from '@/components/ui/SignalBadge.vue'
 import AssetTable from '@/components/portfolio/AssetTable.vue'
+import ValasSection from '@/components/portfolio/ValasSection.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import { formatJuta, formatPct } from '@/utils/formatters'
 
@@ -23,6 +24,9 @@ const reksaItems = computed(() =>
     return { ...item, current_nab: item.avg_nab ?? 0 }
   }),
 )
+
+const valasItems   = computed(() => reportStore.valasItems)
+const valasSummary = computed(() => reportStore.valasSummary)
 
 const totalItems = computed(
   () => emasItems.value.length + sahamItems.value.length + reksaItems.value.length,
@@ -150,7 +154,13 @@ onMounted(() => reportStore.fetchReport())
         </template>
       </AssetTable>
 
-      <!-- 4 ─ Reksa Dana section -->
+      <!-- 4 ─ Valas section -->
+      <ValasSection
+        :items="valasItems"
+        :summary="valasSummary"
+      />
+
+      <!-- 5 ─ Reksa Dana section -->
       <AssetTable
         title="🏦 Reksa Dana"
         :data="reksaItems"

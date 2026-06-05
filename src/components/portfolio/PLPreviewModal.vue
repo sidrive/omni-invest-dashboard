@@ -33,20 +33,24 @@ function detectChanges(beforeList, afterList) {
 
 const before = computed(() => props.originalPortfolio ?? portfolioStore.originalPortfolio)
 
-const emasChanges  = computed(() => detectChanges(before.value?.emas, props.after?.emas))
-const sahamChanges = computed(() => detectChanges(before.value?.saham, props.after?.saham))
+const emasChanges  = computed(() => detectChanges(before.value?.emas,      props.after?.emas))
+const sahamChanges = computed(() => detectChanges(before.value?.saham,     props.after?.saham))
 const reksaChanges = computed(() => detectChanges(before.value?.reksadana, props.after?.reksadana))
+const valasChanges = computed(() => detectChanges(before.value?.valas,     props.after?.valas))
 
 const allChanges = computed(() => [
-  ...emasChanges.value.added.map(i   => ({ label: i.nama ?? i.id, type: 'add',    cat: 'Emas' })),
-  ...emasChanges.value.deleted.map(i => ({ label: i.nama ?? i.id, type: 'delete', cat: 'Emas' })),
-  ...emasChanges.value.edited.map(i  => ({ label: i.nama ?? i.id, type: 'edit',   cat: 'Emas' })),
-  ...sahamChanges.value.added.map(i  => ({ label: i.id,            type: 'add',    cat: 'Saham' })),
-  ...sahamChanges.value.deleted.map(i=> ({ label: i.id,            type: 'delete', cat: 'Saham' })),
-  ...sahamChanges.value.edited.map(i => ({ label: i.id,            type: 'edit',   cat: 'Saham' })),
-  ...reksaChanges.value.added.map(i  => ({ label: i.nama ?? i.id, type: 'add',    cat: 'Reksa' })),
-  ...reksaChanges.value.deleted.map(i=> ({ label: i.nama ?? i.id, type: 'delete', cat: 'Reksa' })),
-  ...reksaChanges.value.edited.map(i => ({ label: i.nama ?? i.id, type: 'edit',   cat: 'Reksa' })),
+  ...emasChanges.value.added.map(i    => ({ label: i.nama ?? i.id,    type: 'add',    cat: 'Emas'  })),
+  ...emasChanges.value.deleted.map(i  => ({ label: i.nama ?? i.id,    type: 'delete', cat: 'Emas'  })),
+  ...emasChanges.value.edited.map(i   => ({ label: i.nama ?? i.id,    type: 'edit',   cat: 'Emas'  })),
+  ...sahamChanges.value.added.map(i   => ({ label: i.id,               type: 'add',    cat: 'Saham' })),
+  ...sahamChanges.value.deleted.map(i => ({ label: i.id,               type: 'delete', cat: 'Saham' })),
+  ...sahamChanges.value.edited.map(i  => ({ label: i.id,               type: 'edit',   cat: 'Saham' })),
+  ...reksaChanges.value.added.map(i   => ({ label: i.nama ?? i.id,    type: 'add',    cat: 'Reksa' })),
+  ...reksaChanges.value.deleted.map(i => ({ label: i.nama ?? i.id,    type: 'delete', cat: 'Reksa' })),
+  ...reksaChanges.value.edited.map(i  => ({ label: i.nama ?? i.id,    type: 'edit',   cat: 'Reksa' })),
+  ...valasChanges.value.added.map(i   => ({ label: i.code ?? i.id,    type: 'add',    cat: 'Valas' })),
+  ...valasChanges.value.deleted.map(i => ({ label: i.code ?? i.id,    type: 'delete', cat: 'Valas' })),
+  ...valasChanges.value.edited.map(i  => ({ label: i.code ?? i.id,    type: 'edit',   cat: 'Valas' })),
 ])
 
 const hasChanges = computed(() => allChanges.value.length > 0)
@@ -65,12 +69,20 @@ function countItems(p) {
     emas:  (p?.emas ?? []).length,
     saham: (p?.saham ?? []).length,
     reksa: (p?.reksadana ?? []).length,
-    total: ((p?.emas?.length ?? 0) + (p?.saham?.length ?? 0) + (p?.reksadana?.length ?? 0)),
+    valas: (p?.valas ?? []).length,
+    total: ((p?.emas?.length ?? 0) + (p?.saham?.length ?? 0) + (p?.reksadana?.length ?? 0) + (p?.valas?.length ?? 0)),
   }
 }
 
 const beforeMetrics = computed(() => ({ modal: calcModal(before.value), count: countItems(before.value) }))
 const afterMetrics  = computed(() => ({ modal: calcModal(props.after),  count: countItems(props.after) }))
+
+const modalValasBefore = computed(() =>
+  (before.value?.valas ?? []).reduce((s, i) => s + (i.qty_unit ?? 0) * (i.avg_buy_rate ?? 0), 0),
+)
+const modalValasAfter = computed(() =>
+  (props.after?.valas ?? []).reduce((s, i) => s + (i.qty_unit ?? 0) * (i.avg_buy_rate ?? 0), 0),
+)
 
 function diffClass(after, bef) {
   if (after > bef) return 'diff-pos'
@@ -173,6 +185,13 @@ const CHANGE_LABELS = { add: 'TAMBAH', edit: 'UBAH', delete: 'HAPUS' }
                       {{ formatJuta(afterMetrics.modal.reksa) }} Jt
                     </td>
                   </tr>
+                  <tr>
+                    <td class="td-metric">Modal Valas</td>
+                    <td class="td-val mono">{{ formatJuta(modalValasBefore) }} Jt</td>
+                    <td :class="['td-val mono', diffClass(modalValasAfter, modalValasBefore)]">
+                      {{ formatJuta(modalValasAfter) }} Jt
+                    </td>
+                  </tr>
 
                   <!-- Item counts -->
                   <tr class="tr-sep"><td colspan="3" /></tr>
@@ -195,6 +214,13 @@ const CHANGE_LABELS = { add: 'TAMBAH', edit: 'UBAH', delete: 'HAPUS' }
                     <td class="td-val">{{ beforeMetrics.count.reksa }} item</td>
                     <td :class="['td-val', diffClass(afterMetrics.count.reksa, beforeMetrics.count.reksa)]">
                       {{ afterMetrics.count.reksa }} item
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="td-metric">Jumlah Valas</td>
+                    <td class="td-val">{{ beforeMetrics.count.valas }} item</td>
+                    <td :class="['td-val', diffClass(afterMetrics.count.valas, beforeMetrics.count.valas)]">
+                      {{ afterMetrics.count.valas }} item
                     </td>
                   </tr>
                   <tr>

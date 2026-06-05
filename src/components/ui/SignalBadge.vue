@@ -6,12 +6,14 @@ defineProps({
 // Normalize to CSS class key
 function signalClass(s) {
   const map = {
-    BUY:      'buy',
-    SELL:     'sell',
-    HOLD:     'hold',
-    AVG_DOWN: 'avg-down',
-    DCA:      'dca',
-    STOPLOSS: 'stoploss',
+    BUY:          'buy',
+    SELL:         'sell',
+    HOLD:         'hold',
+    AVG_DOWN:     'avg-down',
+    DCA:          'dca',
+    STOPLOSS:     'stoploss',
+    SELL_PARTIAL: 'sell-partial',
+    DATA_ERROR:   'data-error',
   }
   return map[s?.toUpperCase()] ?? 'hold'
 }
@@ -78,6 +80,19 @@ function signalClass(s) {
   border-color: var(--red);
   box-shadow: 0 0 10px rgba(255, 71, 87, 0.35);
   animation: pulse-danger 1.5s ease-in-out infinite;
+}
+
+.signal-sell-partial {
+  background: rgba(255, 71, 87, 0.08);
+  color: #ff4757;
+  border-color: rgba(255, 71, 87, 0.3);
+  box-shadow: 0 0 6px rgba(255, 71, 87, 0.15);
+}
+
+.signal-data-error {
+  background: rgba(255, 107, 53, 0.1);
+  color: #ff6b35;
+  border-color: rgba(255, 107, 53, 0.35);
 }
 
 @keyframes pulse-danger {

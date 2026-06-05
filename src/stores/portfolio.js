@@ -17,6 +17,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
   const sahamList = computed(() => portfolio.value?.saham ?? [])
   const reksaList = computed(() => portfolio.value?.reksadana ?? [])
 
+  const valasList = computed(() => portfolio.value?.valas ?? [])
+
   const allItemsCount = computed(
     () => emasList.value.length + sahamList.value.length + reksaList.value.length,
   )
@@ -67,6 +69,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
         emas:              data.emas      || [],
         saham:             data.saham     || [],
         reksadana:         data.reksadana || [],
+        valas:             data.valas     || [],
       }
       await apiSave(payload)
       // Reload fresh dari Firestore agar UI sinkron
@@ -103,6 +106,7 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     emasList,
     sahamList,
     reksaList,
+    valasList,
     allItemsCount,
     totalModal,
     fetchPortfolio,

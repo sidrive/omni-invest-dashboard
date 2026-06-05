@@ -29,6 +29,9 @@ export const useMarketStore = defineStore('market', () => {
     return Number(((curr - prev) / prev * 100).toFixed(2))
   })
 
+  // Format: { USD: { rate, change_pct, status, symbol }, SGD: {...}, ... }
+  const valasRates = computed(() => market.value?.valas?.rates ?? {})
+
   // ── Actions ──
   async function fetchGoldHistory() {
     try {
@@ -62,7 +65,7 @@ export const useMarketStore = defineStore('market', () => {
 
   return {
     market, lastSync, loading, error, goldHistory,
-    goldPrice, stockList, goldSparklineData, goldChangePct,
+    goldPrice, stockList, goldSparklineData, goldChangePct, valasRates,
     fetchMarket, fetchGoldHistory,
   }
 })

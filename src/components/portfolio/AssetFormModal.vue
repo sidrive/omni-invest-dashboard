@@ -28,16 +28,23 @@ function emptyForm() {
   }
 }
 
-const form   = reactive(emptyForm())
-const errors = ref({})
+const form            = reactive(emptyForm())
+const errors          = ref({})
+const emasModalHelper = ref(null)
 
 // Populate when modal opens
 watch(() => props.modelValue, (open) => {
   if (!open) return
   errors.value = {}
+  emasModalHelper.value = null
   Object.assign(form, emptyForm())
   if (props.item) Object.assign(form, props.item)
 })
+
+function onEmasModalInput() {
+  if (!(emasModalHelper.value > 0) || !(form.qty_gram > 0)) return
+  form.avg_buy_price = Math.round(emasModalHelper.value / form.qty_gram)
+}
 
 // Auto uppercase ID for saham + auto-fill ticker
 watch(() => form.id, (val) => {
@@ -163,7 +170,25 @@ function submit() {
                   <input v-model.number="form.avg_buy_price" type="number" min="1"
                     class="field-input mono" :class="{ err: errors.avg_buy_price }" placeholder="1050000" />
                   <span v-if="errors.avg_buy_price" class="err-msg">{{ errors.avg_buy_price }}</span>
+                  <span class="emas-hint">Harga per gram. Jika tahu total modal: bagi total modal ÷ jumlah gram</span>
                 </div>
+              </div>
+              <div v-if="form.qty_gram > 0" class="field">
+                <label class="field-label">
+                  Atau hitung dari total modal <span class="field-hint">(opsional)</span>
+                </label>
+                <input
+                  v-model.number="emasModalHelper"
+                  type="number"
+                  min="1"
+                  step="1000"
+                  class="field-input mono"
+                  placeholder="cth: 3000000"
+                  @input="onEmasModalInput"
+                />
+                <span v-if="emasModalHelper > 0" class="emas-calc mono">
+                  → Rp{{ Math.round(emasModalHelper / form.qty_gram).toLocaleString('id-ID') }}/gram
+                </span>
               </div>
             </template>
 
@@ -324,8 +349,10 @@ function submit() {
 .field-input:read-only { opacity: 0.5; cursor: not-allowed; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .err-msg { font-size: 10px; color: var(--red); font-family: var(--font-mono); }
-.nab-hint { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--blue); margin-top: 2px; }
-.rd-hint  { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--text3); margin-top: 2px; }
+.nab-hint  { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--blue); margin-top: 2px; }
+.rd-hint   { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.5px; color: var(--text3); margin-top: 2px; }
+.emas-hint { display: block; font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.3px; color: var(--text3); margin-top: 3px; line-height: 1.4; }
+.emas-calc { display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--accent); margin-top: 4px; letter-spacing: 0.3px; }
 
 .modal-footer {
   display: flex; justify-content: flex-end; gap: 10px;
