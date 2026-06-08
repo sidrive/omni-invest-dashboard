@@ -921,6 +921,179 @@ Test: edit emas → simpan → cek apakah valas masih ada di Firestore.
 
 ---
 
+🏠 PROMPT 23 — REDESIGN DASHBOARD VIEW (ASSET-CENTRIC LAYOUT)
+@PROJECT_CONTEXT.md
+
+Redesign `src/views/DashboardView.vue` dengan layout baru yang lebih informatif.
+Semua kalkulasi dikerjakan di frontend — JANGAN ubah backend/engine/stores.
+
+Import stores: useReportStore, useMarketStore
+Gunakan getter yang sudah ada:
+
+- reportStore.report.emas.items → list aset emas
+- reportStore.report.saham.items → list aset saham
+- reportStore.valasItems → getter: report?.valas?.items ?? []
+- reportStore.valasSummary → getter: report?.valas?.summary
+- reportStore.report.reksadana.items → list aset reksadana
+- reportStore.summary → total_nilai, total_pl, total_pl_pct
+- reportStore.allokasi → aktual, target, rekomendasi
+- marketStore.goldSparklineData → array harga untuk sparkline emas
+- marketStore.valasRates → { USD: { rate, change_pct, status, symbol }, ... }
+- marketStore.market.saham.stocks → { "BBCA.JK": { price, change_pct }, ... }
+
+Auto-fetch saat mounted. Auto-refresh setiap 60 detik.
+
+═══════════════════════════════════════════════════
+LAYOUT BARU (dari atas ke bawah):
+═══════════════════════════════════════════════════
+
+── SECTION 1: SIGNAL BANNER (tidak berubah) ──
+Full width, conditional merah/oranye/hijau berdasarkan criticalSignals / highPrioritySignals.
+
+── SECTION 2: 4 STAT CARDS (tidak berubah) ──
+Total Aset | Floating P&L | Sinyal Aktif | Alokasi Emas
+
+── SECTION 3: LIVE HARGA PASAR — FULL WIDTH ──
+Header section: "Live Harga Pasar" + subtitle "// Real-time" + timestamp lastSync
+
+Dibagi 4 card vertikal full width, urutan: Emas → Saham → Valas → Reksa Dana
+
+▌CARD A — EMAS
+Header: "🥇 Emas" kiri | harga spot: market.emas.price + change_pct kanan
+Data: report.emas.items — field yang tersedia: { id, nama, qty_gram, avg_buy_price,
+harga_pasar, nilai_pasar, modal, pl, pl_pct, signal }
+
+Per baris aset emas:
+Kiri: [Nama Aset] tebal
+bawahnya: "qty_gram g · Avg Rp{avg_buy_price}/g" font-mono kecil --text2
+Tengah: Rp{harga_pasar} font-mono tebal
+"Nilai: Rp{nilai_pasar}" kecil --text2
+Kanan: "+Rp{pl}" warna --green/--red | "+{pl_pct}%" font-mono
+Paling kanan: <PriceSparkline :data="goldSparklineData" :changePct="marketStore.goldChangePct" />
+
+Separator tipis antar baris.
+Footer baris: "Total" | — | Rp{report.emas.total_nilai} | +Rp{emas_total_pl} / +{emas_total_pl_pct}%
+Kalkulasi footer di computed:
+const emasItems = computed(() => reportStore.report?.emas?.items ?? [])
+const emasTotal = computed(() => ({
+nilai: emasItems.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0),
+pl: emasItems.value.reduce((s, i) => s + (i.pl ?? 0), 0),
+modal: emasItems.value.reduce((s, i) => s + (i.modal ?? 0), 0),
+get pl_pct() { return this.modal > 0 ? (this.pl / this.modal) \* 100 : 0 }
+}))
+
+▌CARD B — SAHAM
+Header: "📈 Saham" kiri
+Data: report.saham.items — field: { id, ticker, nama, qty_lot, avg_buy_price,
+harga_pasar, nilai_pasar, modal, pl, pl_pct, signal, support, resistance }
+
+Per baris:
+Kiri: [TICKER] font-mono tebal --accent [nama] --text2 kecil
+bawah: "qty_lot lot · Avg Rp{avg_buy_price}" font-mono kecil --text2
+Tengah: Rp{harga_pasar} tebal font-mono
+baris change%: ambil dari marketStore.market?.saham?.stocks[ticker]?.change_pct
+Fallback: tampilkan "—" jika tidak ada
+baris kecil: "S: Rp{support} R: Rp{resistance}" --text3
+Kanan: +Rp{pl} / +{pl_pct}%
+Paling kanan: <PriceSparkline :changePct="getStockChangePct(item.ticker)" />
+
+Helper function:
+const getStockChangePct = (ticker) => {
+return marketStore.market?.saham?.stocks?.[ticker]?.change_pct ?? 0
+}
+
+Footer: total nilai saham + total P&L saham (sama pola dengan emas)
+
+▌CARD C — VALAS
+Sembunyikan card ini jika valasItems.length === 0.
+Header: "💱 Valas" kiri | total nilai IDR kanan
+
+Data: reportStore.valasItems — field yang tersedia per item:
+{ id, code, nama, qty_unit, avg_buy_rate, current_rate, change_pct,
+modal, nilai_pasar, pl, pl_pct, signal }
+
+PENTING: Gunakan item.current_rate dan item.change_pct dari report — JANGAN ambil dari market store
+untuk menampilkan kurs live per baris (data sudah ada di report).
+marketStore.valasRates bisa dipakai HANYA untuk header summary card jika diperlukan.
+
+Per baris:
+Kiri: {FLAG_MAP[item.code]} [item.code]/IDR font-mono tebal
+bawah: [item.nama] kecil --text2
+bawah: "Qty: {qty_unit formatted} · Avg Rp{avg_buy_rate}" font-mono kecil --text3
+Tengah: Rp{item.current_rate} per unit font-mono tebal
+▲/▼ {item.change_pct}% warna --green/--red
+baris kecil: "Nilai: Rp{item.nilai_pasar}" --text2
+Kanan: Rp{item.pl} warna --green/--red | {item.pl_pct}%
+
+Format qty valas: JPY → tanpa desimal, lainnya 2 desimal.
+Simbol: { USD: '$', SGD: 'S$', EUR: '€', JPY: '¥' }
+Flag: { USD: '🇺🇸', SGD: '🇸🇬', EUR: '🇪🇺', JPY: '🇯🇵' }
+
+Footer: gunakan langsung valasSummary.total_nilai dan valasSummary.total_pl dari store getter.
+
+▌CARD D — REKSA DANA
+Header: "🏦 Reksa Dana" kiri
+Data: report.reksadana.items — field: { id, nama, qty_unit, avg_nab, current_nab,
+modal, nilai_pasar, pl, pl_pct, signal }
+PENTING: field avg NAB di report adalah avg_nab (BUKAN avg_buy_nab)
+
+BUKAN list semua item — HANYA 2 grup berdasarkan pl:
+
+GRUP 1 — "Posisi Naik ▲" (subheader warna --green)
+Filter: items di mana item.pl > 0
+Per baris: [Nama reksa] kiri | Rp{nilai_pasar} tengah | +Rp{pl} / +{pl_pct}% kanan --green
+Footer grup:
+"Total Nilai:" Rp{sum nilai_pasar} | "Total Keuntungan:" +Rp{sum pl} warna --green
+
+GRUP 2 — "Posisi Turun / Flat ▼" (subheader warna --red)
+Filter: items di mana item.pl <= 0
+Per baris: [Nama reksa] kiri | Rp{nilai_pasar} tengah | Rp{pl} / {pl_pct}% kanan --red
+Footer grup:
+"Total Nilai:" Rp{sum nilai_pasar} | "Total Kerugian:" Rp{sum pl} warna --red
+
+Jika salah satu grup kosong → tampilkan teks kecil italic "Tidak ada posisi" --text3.
+
+Computed untuk reksa grouping:
+const reksaItems = computed(() => reportStore.report?.reksadana?.items ?? [])
+const reksaNaik = computed(() => reksaItems.value.filter(i => (i.pl ?? 0) > 0))
+const reksaTurun = computed(() => reksaItems.value.filter(i => (i.pl ?? 0) <= 0))
+const reksaNaikTotal = computed(() => ({
+nilai: reksaNaik.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0),
+pl: reksaNaik.value.reduce((s, i) => s + (i.pl ?? 0), 0)
+}))
+const reksaTurunTotal = computed(() => ({
+nilai: reksaTurun.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0),
+pl: reksaTurun.value.reduce((s, i) => s + (i.pl ?? 0), 0)
+}))
+
+── SECTION 4: ALOKASI ASET (dipindah ke bawah) ──
+Komponen AllocationChart dengan 3 progress bar Emas/Saham/Reksa.
+Data: allokasi.aktual dan allokasi.target dari reportStore.allokasi
+Rekomendasi rebalance di bawah progress bar:
+allokasi.rekomendasi = array object { action, asset, actual, target }
+Template: <span :class="rec.action === 'TAMBAH' ? 'clr-green' : 'clr-orange'">{{ rec.action }}</span>
+{{ rec.asset }} · {{ (rec.actual ?? 0).toFixed(1) }}% → {{ rec.target }}%
+
+── SECTION 5: WORKFLOW PIPELINE (tidak berubah) ──
+4 node: Scavenger → Analyst → Messenger → Auditor
+
+═══════════════════════════════════════════════════
+ATURAN IMPLEMENTASI:
+═══════════════════════════════════════════════════
+
+1. Semua kalkulasi total (sum, grouping) di computed() — jangan inline template
+2. P&L sudah dihitung di BE — gunakan langsung item.pl, item.pl_pct, item.modal, item.nilai_pasar
+3. Jangan hitung ulang P&L di FE kecuali untuk footer total (sum dari item yang sudah ada)
+4. Loading skeleton per card saat reportStore.loading === true
+5. Card style: background var(--bg3), border 1px solid var(--border), border-radius 10px, padding 20px
+6. Row separator: border-bottom 1px solid rgba(35,45,66,0.6)
+7. Row hover: background rgba(26,33,51,0.4)
+8. Semua angka: font-mono, tabular-nums
+9. Pertahankan AppTopbar, auto-refresh 60s, dan semua import stores yang ada
+10. Jangan ubah stores, API calls, atau komponen lain — hanya DashboardView.vue
+
+---
+
 _Urutan eksekusi untuk fitur Valas:_
 _Prompt 15.1 → Prompt 16 → Prompt 17 → Prompt 18 → Prompt 19 → Prompt 20_
 _Setelah selesai semua: npm run build && ./deploy.sh_
