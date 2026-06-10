@@ -14,7 +14,9 @@ export const useTransactionsStore = defineStore('transactions', () => {
     error.value = null
     try {
       const res = await getTransactions()
-      transactions.value = res.data.data ?? res.data ?? []
+      const data = res.data ?? []
+      console.log('[TX] fetched:', data.length, 'transactions')
+      transactions.value = data
     } catch (e) {
       error.value = e.message
     } finally {
@@ -26,10 +28,9 @@ export const useTransactionsStore = defineStore('transactions', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await apiAdd(data)
-      const newTx = res.data.data ?? res.data
-      transactions.value.unshift(newTx)
-      return { ok: true, data: newTx }
+      await apiAdd(data)
+      await fetchTransactions()
+      return { ok: true }
     } catch (e) {
       error.value = e.message
       return { ok: false, message: e.message }

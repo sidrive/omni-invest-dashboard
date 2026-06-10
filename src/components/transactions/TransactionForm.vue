@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useTransactionsStore } from '@/stores/transactions'
+import { usePortfolioStore } from '@/stores/portfolio'
 import { useToast } from '@/composables/useToast'
 import { formatRupiah, formatRupiahCompact } from '@/utils/formatters'
 
@@ -11,25 +12,28 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submitted'])
 
-const txStore       = useTransactionsStore()
-const { showToast } = useToast()
+const txStore        = useTransactionsStore()
+const portfolioStore = usePortfolioStore()
+const { showToast }  = useToast()
 
 // ── Form state ──
-const jenisAset = ref('saham')
-const aksi      = ref('BUY')
-const kode      = ref('')
-const namaAset  = ref('')
-const qty       = ref(1)
-const harga     = ref(0)
-const catatan   = ref('')
-const errors    = ref({})
+const jenisAset  = ref('saham')
+const aksi       = ref('BUY')
+const kode       = ref('')
+const namaAset   = ref('')
+const qty        = ref(1)
+const harga      = ref(0)
+const catatan    = ref('')
+const errors     = ref({})
 const submitting = ref(false)
 
+// Suppress jenis_aset watch during programmatic population to avoid clearing prefill values
+const suppressJenisWatch = ref(false)
+
 // ── Derived ──
-const unitLabel = computed(() => {
-  if (jenisAset.value === 'saham') return 'lot'
-  if (jenisAset.value === 'emas')  return 'gram'
-  return 'unit'
+const qtyLabel = computed(() => {
+  const map = { saham: 'LOT', reksa: 'UNIT', emas: 'GRAM', valas: 'UNIT' }
+  return map[jenisAset.value] ?? 'QTY'
 })
 
 const total = computed(() => {
@@ -38,17 +42,51 @@ const total = computed(() => {
   return jenisAset.value === 'saham' ? q * 100 * p : q * p
 })
 
+// ── Kode options from portfolio ──
+const kodeOptions = computed(() => {
+  const p = portfolioStore.portfolio
+  if (!p) return []
+  if (jenisAset.value === 'saham') {
+    return p.saham?.map(s => ({ value: s.id, label: `${s.id} — ${s.nama}`, nama: s.nama })) ?? []
+  }
+  if (jenisAset.value === 'reksa') {
+    return p.reksadana?.map(r => ({ value: r.id, label: `${r.id} — ${r.nama}`, nama: r.nama })) ?? []
+  }
+  if (jenisAset.value === 'emas') {
+    return p.emas?.map(e => ({ value: e.id, label: `${e.id} — ${e.nama}`, nama: e.nama })) ?? []
+  }
+  if (jenisAset.value === 'valas') {
+    return p.valas?.map(v => ({ value: v.code, label: `${v.code} — ${v.nama}`, nama: v.nama })) ?? []
+  }
+  return []
+})
+
+// Auto-fill nama when kode is selected from dropdown
+watch(kode, (newKode) => {
+  const match = kodeOptions.value.find(o => o.value === newKode)
+  if (match) namaAset.value = match.nama
+})
+
+// Reset kode & nama when jenis_aset changes (skipped during programmatic populate)
+watch(jenisAset, () => {
+  if (suppressJenisWatch.value) return
+  kode.value = ''
+  namaAset.value = ''
+})
+
 // ── Form populate / reset ──
 function populateFromPrefill(pf) {
   if (!pf) return
-  jenisAset.value = pf.aset    ?? 'saham'
-  aksi.value      = pf.aksi    ?? 'BUY'
-  kode.value      = pf.kode    ?? ''
-  namaAset.value  = pf.nama    ?? ''
-  harga.value     = pf.harga   ?? 0
+  suppressJenisWatch.value = true
+  jenisAset.value = pf.aset      ?? 'saham'
+  aksi.value      = pf.aksi      ?? 'BUY'
+  kode.value      = pf.kode      ?? ''
+  namaAset.value  = pf.nama      ?? ''
+  harga.value     = pf.harga     ?? 0
   qty.value       = pf.qty_saran ?? 1
   catatan.value   = ''
   errors.value    = {}
+  nextTick(() => { suppressJenisWatch.value = false })
 }
 
 function resetForm() {
@@ -62,16 +100,20 @@ function resetForm() {
   errors.value    = {}
 }
 
-// When modal opens, populate or reset
+// When modal opens, populate or reset; also ensure portfolio is loaded
 watch(() => props.modelValue, (open) => {
   if (open) {
+    if (!portfolioStore.portfolio) portfolioStore.fetchPortfolio()
     props.prefill ? populateFromPrefill(props.prefill) : resetForm()
   }
 })
 
 // ── Keyboard close ──
 function onKeydown(e) { if (e.key === 'Escape') close() }
-onMounted(()   => document.addEventListener('keydown', onKeydown))
+onMounted(() => {
+  document.addEventListener('keydown', onKeydown)
+  if (!portfolioStore.portfolio) portfolioStore.fetchPortfolio()
+})
 onUnmounted(() => document.removeEventListener('keydown', onKeydown))
 
 // ── Close ──
@@ -100,7 +142,6 @@ async function submit() {
     harga:      Number(harga.value),
     total:      total.value,
     catatan:    catatan.value.trim(),
-    timestamp:  new Date().toISOString(),
   }
   const result = await txStore.addTransaction(data)
   submitting.value = false
@@ -164,6 +205,7 @@ async function submit() {
                   <option value="saham">Saham</option>
                   <option value="emas">Emas</option>
                   <option value="reksa">Reksa Dana</option>
+                  <option value="valas">Valas</option>
                 </select>
               </div>
 
@@ -180,14 +222,28 @@ async function submit() {
             <!-- Kode -->
             <div class="field">
               <label class="field-label">
-                {{ jenisAset === 'saham' ? 'Kode Saham' : jenisAset === 'emas' ? 'Jenis Emas' : 'Kode Reksa Dana' }}
+                {{ jenisAset === 'saham' ? 'Kode Saham' : jenisAset === 'emas' ? 'Jenis Emas' : jenisAset === 'valas' ? 'Kode Valas' : 'Kode Reksa Dana' }}
               </label>
-              <input
-                v-model="kode"
-                class="field-input mono"
-                :placeholder="jenisAset === 'saham' ? 'BBCA' : jenisAset === 'emas' ? 'ANTAM' : 'SUCORINVEST_EQUITY'"
-                :class="{ 'input-error': errors.kode }"
-              />
+              <template v-if="kodeOptions.length > 0">
+                <select
+                  v-model="kode"
+                  class="field-select mono"
+                  :class="{ 'input-error': errors.kode }"
+                >
+                  <option value="" disabled>Pilih kode...</option>
+                  <option v-for="opt in kodeOptions" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                </select>
+              </template>
+              <template v-else>
+                <input
+                  v-model="kode"
+                  class="field-input mono"
+                  :placeholder="jenisAset === 'saham' ? 'BBCA' : jenisAset === 'emas' ? 'ANTAM' : jenisAset === 'valas' ? 'USD' : 'SUCORINVEST_EQUITY'"
+                  :class="{ 'input-error': errors.kode }"
+                />
+              </template>
               <span v-if="errors.kode" class="error-msg">{{ errors.kode }}</span>
             </div>
 
@@ -204,7 +260,7 @@ async function submit() {
             <div class="form-row-2">
               <!-- Qty -->
               <div class="field">
-                <label class="field-label">Qty ({{ unitLabel }})</label>
+                <label class="field-label">Qty ({{ qtyLabel }})</label>
                 <input
                   v-model.number="qty"
                   type="number"
@@ -219,7 +275,7 @@ async function submit() {
               <!-- Harga -->
               <div class="field">
                 <label class="field-label">
-                  Harga <span class="field-unit">(per {{ unitLabel === 'lot' ? 'lembar' : unitLabel }})</span>
+                  Harga <span class="field-unit">(per {{ qtyLabel === 'LOT' ? 'lembar' : qtyLabel.toLowerCase() }})</span>
                 </label>
                 <input
                   v-model.number="harga"
@@ -432,9 +488,11 @@ async function submit() {
 .field-input:focus,
 .field-select:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 229, 160, 0.15);
 }
 
-.field-input.input-error { border-color: var(--danger); }
+.field-input.input-error,
+.field-select.input-error { border-color: var(--danger); }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
