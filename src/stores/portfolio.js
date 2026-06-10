@@ -72,10 +72,8 @@ export const usePortfolioStore = defineStore('portfolio', () => {
         valas:             data.valas     || [],
       }
       await apiSave(payload)
-      // Reload fresh dari Firestore agar UI sinkron
       await fetchPortfolio()
-      // Trigger pipeline di background — tidak ditunggu
-      useReportStore().runPipeline()
+      useReportStore().startPipelinePolling(Date.now())
       return { ok: true }
     } catch (e) {
       error.value = e.message

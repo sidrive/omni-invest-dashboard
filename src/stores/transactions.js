@@ -29,6 +29,9 @@ export const useTransactionsStore = defineStore('transactions', () => {
     error.value = null
     try {
       await apiAdd(data)
+      const { useReportStore } = await import('@/stores/report')
+      const reportStore = useReportStore()
+      reportStore.startPipelinePolling(Date.now())
       await fetchTransactions()
       return { ok: true }
     } catch (e) {

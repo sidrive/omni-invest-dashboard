@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useTransactionsStore } from '@/stores/transactions'
 import { usePortfolioStore } from '@/stores/portfolio'
+import { useReportStore } from '@/stores/report'
 import { useToast } from '@/composables/useToast'
 import { formatRupiah, formatRupiahCompact } from '@/utils/formatters'
 
@@ -14,6 +15,7 @@ const emit = defineEmits(['update:modelValue', 'submitted'])
 
 const txStore        = useTransactionsStore()
 const portfolioStore = usePortfolioStore()
+const reportStore    = useReportStore()
 const { showToast }  = useToast()
 
 // ── Form state ──
@@ -146,7 +148,7 @@ async function submit() {
   const result = await txStore.addTransaction(data)
   submitting.value = false
   if (result.ok) {
-    showToast('Transaksi berhasil disimpan', 'success')
+    showToast('Transaksi berhasil disimpan. Analyst report sedang diperbarui...', 'success')
     emit('submitted', data)
     close()
   } else {
@@ -192,6 +194,15 @@ async function submit() {
                 <span class="ag-key">Saran lot</span>
                 <span class="ag-val ag-highlight mono">{{ prefill.qty_saran }} lot</span>
               </div>
+            </div>
+          </div>
+
+          <!-- Pipeline running banner -->
+          <div v-if="reportStore.running" class="pipeline-banner">
+            <span class="pipeline-spin">⟳</span>
+            <div class="pipeline-text">
+              <span class="pipeline-title">Analyst sedang berjalan...</span>
+              <span class="pipeline-sub">Portfolio &amp; P&amp;L akan terupdate otomatis dalam beberapa menit</span>
             </div>
           </div>
 
@@ -580,6 +591,41 @@ async function submit() {
 
 .spin { display: inline-block; animation: spin 0.8s linear infinite; font-size: 16px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Pipeline running banner ── */
+.pipeline-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  background: rgba(0, 132, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 132, 255, 0.2);
+}
+
+.pipeline-spin {
+  font-size: 16px;
+  color: var(--blue);
+  animation: spin 1.2s linear infinite;
+  flex-shrink: 0;
+}
+
+.pipeline-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pipeline-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
+.pipeline-sub {
+  font-size: 10px;
+  color: var(--text3);
+  font-family: var(--font-mono);
+}
 
 /* ── Transition ── */
 .modal-enter-active,

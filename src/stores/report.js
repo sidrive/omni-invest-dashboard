@@ -79,6 +79,40 @@ export const useReportStore = defineStore('report', () => {
     }
   }
 
+  function setRunning(val) { running.value = val }
+
+  let _pollingTimer = null
+
+  function startPipelinePolling(sinceTimestamp) {
+    running.value = true
+    if (_pollingTimer) clearInterval(_pollingTimer)
+
+    _pollingTimer = setInterval(async () => {
+      try {
+        const res = await getReport()
+        const data = res.data ?? res
+        const analyzedAt = data?.analyzed_at
+        if (analyzedAt && new Date(analyzedAt).getTime() > sinceTimestamp) {
+          running.value = false
+          report.value = data
+          clearInterval(_pollingTimer)
+          _pollingTimer = null
+        }
+      } catch {
+        // silent — tetap polling
+      }
+    }, 15000)
+
+    // Safety timeout 10 menit
+    setTimeout(() => {
+      if (_pollingTimer) {
+        clearInterval(_pollingTimer)
+        _pollingTimer = null
+      }
+      running.value = false
+    }, 600000)
+  }
+
   return {
     report,
     loading,
@@ -94,5 +128,7 @@ export const useReportStore = defineStore('report', () => {
     valasItems,
     fetchReport,
     runPipeline,
+    setRunning,
+    startPipelinePolling,
   }
 })
