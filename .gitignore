@@ -14,7 +14,7 @@ node_modules
 dist-ssr
 coverage
 *.local
-
+deploy.sh
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
