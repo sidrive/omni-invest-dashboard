@@ -8,8 +8,13 @@ import StatCard from '@/components/ui/StatCard.vue'
 import SignalBadge from '@/components/ui/SignalBadge.vue'
 import RoleBadge from '@/components/ui/RoleBadge.vue'
 import AllocationChart from '@/components/charts/AllocationChart.vue'
+import GoldHistoryChart from '@/components/charts/GoldHistoryChart.vue'
+import StockMiniChart   from '@/components/charts/StockMiniChart.vue'
+import ValasMiniChart   from '@/components/charts/ValasMiniChart.vue'
+import PriceSparkline   from '@/components/charts/PriceSparkline.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import { formatRupiah, formatJuta, formatPct, formatDateTime } from '@/utils/formatters'
+import { generateSparklineData } from '@/utils/calculator'
 
 const router = useRouter()
 const reportStore = useReportStore()
@@ -49,6 +54,10 @@ const emasTotal  = computed(() => {
   const nilai = emasItems.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0)
   return { modal, pl, nilai, pl_pct: modal > 0 ? (pl / modal) * 100 : 0 }
 })
+
+// Sparkline emas — 1 data set mewakili semua posisi
+const goldSparklineData = computed(() => marketStore.goldSparklineData ?? [])
+const goldChangePct     = computed(() => marketStore.goldChangePct ?? 0)
 
 // ── Saham ─────────────────────────────────────────────────────
 const sahamItems = computed(() => reportStore.report?.saham?.items ?? [])
@@ -98,6 +107,14 @@ const fmtPct = (n) => {
   return (n > 0 ? '+' : '') + Number(n).toFixed(2) + '%'
 }
 
+// ── Price History Charts ──────────────────────────────────────
+const valasRates = computed(() => {
+  const rates = marketStore.valasRates ?? {}
+  return Object.entries(rates)
+    .filter(([, d]) => d?.rate > 0)
+    .map(([code, d]) => ({ code, ...d }))
+})
+
 // ── Pipeline ──────────────────────────────────────────────────
 const pipeline = computed(() => [
   {
@@ -130,7 +147,11 @@ const pipeline = computed(() => [
 let timer = null
 
 async function refresh() {
-  await Promise.all([reportStore.fetchReport(), marketStore.fetchMarket()])
+  await Promise.all([
+    reportStore.fetchReport(),
+    marketStore.fetchMarket(),
+    marketStore.fetchGoldHistory()
+  ])
 }
 
 onMounted(async () => {
@@ -266,23 +287,38 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
             </div>
             <div v-else-if="emasItems.length === 0" class="ov-empty">Tidak ada data emas</div>
             <div v-else class="ov-emas-grid">
-              <div v-for="item in emasItems" :key="item.id" class="ov-card">
-                <div class="ov-card-title">{{ item.nama }}</div>
-                <div v-if="item.catatan" class="ov-card-sub">{{ item.catatan }}</div>
-                <div class="ov-metrics">
-                  <div class="ov-metric">
-                    <span class="ov-metric-lbl">Nilai</span>
-                    <span class="ov-metric-val mono">{{ formatRupiah(item.nilai_pasar) }}</span>
+              <div v-for="item in emasItems" :key="item.id" class="ov-card ov-card--chart">
+                <!-- Kiri: info -->
+                <div class="ov-card-info">
+                  <div class="ov-card-title">{{ item.nama }}</div>
+                  <div v-if="item.catatan" class="ov-card-sub">{{ item.catatan }}</div>
+                  <div class="ov-metrics">
+                    <div class="ov-metric">
+                      <span class="ov-metric-lbl">Nilai</span>
+                      <span class="ov-metric-val mono">{{ formatRupiah(item.nilai_pasar) }}</span>
+                    </div>
+                    <div class="ov-metric">
+                      <span class="ov-metric-lbl">Keuntungan</span>
+                      <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
+                        {{ fmtPL(item.pl) }}
+                      </span>
+                      <span :class="['ov-metric-pct mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
+                        ({{ fmtPct(item.pl_pct) }})
+                      </span>
+                    </div>
                   </div>
-                  <div class="ov-metric">
-                    <span class="ov-metric-lbl">Keuntungan</span>
-                    <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
-                      {{ fmtPL(item.pl) }}
-                    </span>
-                    <span :class="['ov-metric-pct mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
-                      ({{ fmtPct(item.pl_pct) }})
-                    </span>
-                  </div>
+                </div>
+                <!-- Kanan: grafik emas (data sama untuk semua posisi emas) -->
+                <div class="ov-card-chart ov-emas-chart">
+                  <PriceSparkline
+                    :data="goldSparklineData"
+                    :changePct="goldChangePct"
+                    :width="100"
+                    :height="52"
+                  />
+                  <span class="ov-chart-label mono">
+                    {{ goldChangePct >= 0 ? '▲' : '▼' }}{{ Math.abs(goldChangePct).toFixed(2) }}% hari ini
+                  </span>
                 </div>
               </div>
             </div>
@@ -307,25 +343,40 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
             </div>
             <div v-else-if="sahamItems.length === 0" class="ov-empty">Tidak ada data saham</div>
             <div v-else class="ov-list">
-              <div v-for="item in sahamItems" :key="item.id" class="ov-card">
-                <div class="ov-saham-top">
-                  <div>
-                    <div class="ov-card-title mono clr-accent">{{ item.ticker?.replace('.JK', '') }}</div>
-                    <div class="ov-card-sub">{{ item.nama }}</div>
+              <div v-for="item in sahamItems" :key="item.id" class="ov-card ov-card--chart">
+                <!-- Kiri: info -->
+                <div class="ov-card-info">
+                  <div class="ov-saham-top">
+                    <div>
+                      <div class="ov-card-title mono clr-accent">{{ item.ticker?.replace('.JK', '') }}</div>
+                      <div class="ov-card-sub">{{ item.nama }}</div>
+                    </div>
+                    <span class="ov-lot mono">{{ item.qty_lot }} Lot</span>
                   </div>
-                  <span class="ov-lot mono">{{ item.qty_lot }} Lot</span>
+                  <div class="ov-metrics">
+                    <div class="ov-metric">
+                      <span class="ov-metric-lbl">Nilai</span>
+                      <span class="ov-metric-val mono">{{ formatRupiah(item.nilai_pasar) }}</span>
+                    </div>
+                    <div class="ov-metric">
+                      <span class="ov-metric-lbl">Return</span>
+                      <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
+                        {{ fmtPL(item.pl) }} ({{ fmtPct(item.pl_pct) }})
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div class="ov-metrics">
-                  <div class="ov-metric">
-                    <span class="ov-metric-lbl">Nilai</span>
-                    <span class="ov-metric-val mono">{{ formatRupiah(item.nilai_pasar) }}</span>
-                  </div>
-                  <div class="ov-metric">
-                    <span class="ov-metric-lbl">Return</span>
-                    <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
-                      {{ fmtPL(item.pl) }} ({{ fmtPct(item.pl_pct) }})
-                    </span>
-                  </div>
+                <!-- Kanan: grafik per saham -->
+                <div class="ov-card-chart">
+                  <PriceSparkline
+                    :data="generateSparklineData(item.change_pct ?? 0, 14)"
+                    :changePct="item.change_pct ?? 0"
+                    :width="100"
+                    :height="52"
+                  />
+                  <span :class="['ov-chart-label mono', (item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
+                    {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}% hari ini
+                  </span>
                 </div>
               </div>
             </div>
@@ -345,29 +396,42 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
                 </span>
               </div>
               <div class="ov-list">
-                <div v-for="item in valasItems" :key="item.id" class="ov-card">
-                  <div class="ov-valas-top">
-                    <span class="ov-card-title mono">{{ FLAG_MAP[item.code] ?? '🏳️' }} {{ item.code }} / IDR</span>
-                    <span class="ov-valas-qty mono">
-                      Qty: {{ formatQtyValas(item.code, item.qty_unit) }}
-                    </span>
-                  </div>
-                  <div class="ov-metrics">
-                    <div class="ov-metric">
-                      <span class="ov-metric-lbl">Kurs</span>
-                      <span class="ov-metric-val mono">
-                        {{ formatRupiah(item.current_rate) }}
-                        <span :class="(item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red'">
-                          ({{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}%)
+                <div v-for="item in valasItems" :key="item.id" class="ov-card ov-card--chart">
+                  <!-- Kiri: info -->
+                  <div class="ov-card-info">
+                    <div class="ov-valas-top">
+                      <span class="ov-card-title mono">{{ FLAG_MAP[item.code] ?? '🏳️' }} {{ item.code }} / IDR</span>
+                      <span class="ov-valas-qty mono">Qty: {{ formatQtyValas(item.code, item.qty_unit) }}</span>
+                    </div>
+                    <div class="ov-metrics">
+                      <div class="ov-metric">
+                        <span class="ov-metric-lbl">Kurs</span>
+                        <span class="ov-metric-val mono">
+                          {{ formatRupiah(item.current_rate) }}
+                          <span :class="(item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red'">
+                            ({{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}%)
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                      <div class="ov-metric">
+                        <span class="ov-metric-lbl">Performa</span>
+                        <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
+                          {{ fmtPL(item.pl) }} ({{ fmtPct(item.pl_pct) }})
+                        </span>
+                      </div>
                     </div>
-                    <div class="ov-metric">
-                      <span class="ov-metric-lbl">Performa</span>
-                      <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
-                        {{ fmtPL(item.pl) }} ({{ fmtPct(item.pl_pct) }})
-                      </span>
-                    </div>
+                  </div>
+                  <!-- Kanan: grafik per kurs valas -->
+                  <div :class="['ov-card-chart', (item.change_pct ?? 0) >= 0 ? 'ov-valas-chart--up' : 'ov-valas-chart--down']">
+                    <PriceSparkline
+                      :data="generateSparklineData(item.change_pct ?? 0, 14)"
+                      :changePct="item.change_pct ?? 0"
+                      :width="100"
+                      :height="52"
+                    />
+                    <span :class="['ov-chart-label mono', (item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
+                      {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}% hari ini
+                    </span>
                   </div>
                 </div>
               </div>
@@ -465,6 +529,48 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
           </div>
 
         </template>
+      </div>
+
+      <!-- ── 3b: Price History Charts ── -->
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">// Price History</h3>
+          <span class="card-meta">Simulasi tren harga · emas = data real {{ marketStore.goldHistory.length }} hari</span>
+        </div>
+
+        <div class="ph-grid">
+
+          <!-- Kolom Emas (lebih lebar) -->
+          <div class="ph-col ph-col--emas">
+            <div class="ph-col-label">🥇 Emas</div>
+            <GoldHistoryChart />
+          </div>
+
+          <!-- Kolom Saham -->
+          <div v-if="sahamItems.length > 0" class="ph-col">
+            <div class="ph-col-label">📈 Saham</div>
+            <div class="ph-stack">
+              <StockMiniChart
+                v-for="item in sahamItems"
+                :key="item.id"
+                v-bind="item"
+              />
+            </div>
+          </div>
+
+          <!-- Kolom Valas -->
+          <div v-if="valasRates.length > 0" class="ph-col">
+            <div class="ph-col-label">💱 Valas</div>
+            <div class="ph-stack">
+              <ValasMiniChart
+                v-for="v in valasRates"
+                :key="v.code"
+                v-bind="v"
+              />
+            </div>
+          </div>
+
+        </div>
       </div>
 
       <!-- 4 ─ Alokasi Aset -->
@@ -668,6 +774,50 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 14px 16px;
+}
+
+/* ── Card dengan inline chart (layout 2 kolom) ── */
+.ov-card--chart {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.ov-card-info {
+  min-width: 0;
+}
+
+.ov-card-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-left: 12px;
+  border-left: 1px solid var(--border);
+}
+
+/* Override warna sparkline emas ke --warn (kuning) */
+.ov-emas-chart :deep(.sparkline path[fill="none"]) {
+  stroke: var(--warn) !important;
+}
+.ov-emas-chart :deep(.sparkline stop) {
+  stop-color: var(--warn) !important;
+}
+
+/* Override warna sparkline valas positif ke --blue */
+.ov-valas-chart--up :deep(.sparkline path[fill="none"]) {
+  stroke: var(--blue) !important;
+}
+.ov-valas-chart--up :deep(.sparkline stop) {
+  stop-color: var(--blue) !important;
+}
+
+.ov-chart-label {
+  font-size: 10px;
+  color: var(--text3);
+  white-space: nowrap;
 }
 
 .ov-card-title {
@@ -908,6 +1058,40 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   padding: 8px 0;
 }
 
+/* ── Price History ── */
+.ph-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.ph-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ph-col-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.ph-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+@media (max-width: 1024px) {
+  .ph-grid { grid-template-columns: 1fr 1fr; }
+  .ph-col--emas { grid-column: 1 / -1; }
+}
+@media (max-width: 768px) {
+  .ph-grid { grid-template-columns: 1fr; }
+  .ph-col--emas { grid-column: unset; }
+}
+
 /* ── Allocation recs ── */
 .recs-wrap  { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
 .recs-label { font-size: 11px; color: var(--text2); margin-bottom: 8px; }
@@ -1024,6 +1208,19 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   .ov-reksa-thead,
   .ov-reksa-row { gap: 6px; padding: 8px 10px; }
   .ov-reksa-nama { font-size: 11px; }
+
+  .ov-card--chart {
+    grid-template-columns: 1fr;
+  }
+  .ov-card-chart {
+    border-left: none;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 10px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
 
   .signal-banner { flex-direction: column; align-items: stretch; gap: 8px; }
   .btn-banner { min-height: 44px; justify-content: center; display: flex; align-items: center; }

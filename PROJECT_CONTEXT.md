@@ -1,7 +1,7 @@
 # OMNI-INVEST SENTINEL — PROJECT CONTEXT
 
 > Dokumen ini adalah referensi lengkap untuk AI assistant (Claude) saat membantu development dashboard Vue.js
-> Last updated: 2026-05-30
+> Last updated: 2026-06-11
 
 ---
 
@@ -78,7 +78,7 @@ omni-invest-dashboard/
 │   │   │   ├── ValasSection.vue     ← tabel posisi valas (dipakai di PortfolioView)
 │   │   │   └── ValasFormModal.vue   ← form tambah/edit posisi valas (dipakai di SettingsView)
 │   │   └── transactions/
-│   │       └── TransactionForm.vue
+│   │       └── TransactionForm.vue  ← dropdown kode dari portfolio store; pipeline banner biru jika running
 │   ├── router/index.js
 │   ├── utils/
 │   │   ├── formatters.js
@@ -331,12 +331,12 @@ Base URL: `import.meta.env.VITE_API_BASE_URL`
 
 | Method | Endpoint               | Deskripsi                           |
 | ------ | ---------------------- | ----------------------------------- |
-| GET    | `/api/portfolio`       | Ambil portofolio                    |
-| POST   | `/api/portfolio`       | Simpan portofolio                   |
+| GET    | `/api/portfolio`       | Ambil portofolio (dari local JSON, fallback Firestore) |
+| POST   | `/api/portfolio`       | Simpan portfolio lokal + async Firestore sync + auto-trigger pipeline |
 | GET    | `/api/market`          | Harga pasar terbaru                 |
 | GET    | `/api/report`          | Analyst report + sinyal             |
 | GET    | `/api/transactions`    | Riwayat transaksi                   |
-| POST   | `/api/transactions`    | Tambah transaksi                    |
+| POST   | `/api/transactions`    | Tambah transaksi + update avg cost portfolio + auto-trigger pipeline |
 | POST   | `/api/run`             | Trigger pipeline manual             |
 | GET    | `/api/gold-history`    | Historis harga emas harian          |
 | GET    | `/api/watchlist`       | Daftar saham & reksa dipantau       |
@@ -426,12 +426,20 @@ getters: goldPrice, stockList, goldSparklineData, goldChangePct,
 // portfolio.js
 state:   { portfolio: null, originalPortfolio: null, hasChanges: false, loading: false, saving: false }
 actions: fetchPortfolio(), savePortfolio(data)
+         // savePortfolio(data):
+         //   POST /api/portfolio → fetchPortfolio() →
+         //   reportStore.startPipelinePolling(Date.now())
 getters: emasList, sahamList, reksaList,
          valasList  // → portfolio?.valas ?? []
 
 // report.js
 state:   { report: null, loading: false, running: false }
-actions: fetchReport(), runPipeline()
+actions: fetchReport(), runPipeline(), setRunning(val), startPipelinePolling(sinceTimestamp)
+         // startPipelinePolling(sinceTimestamp):
+         //   Set running = true
+         //   Poll GET /api/report setiap 15 detik
+         //   Jika analyzed_at > sinceTimestamp → running = false, stop polling
+         //   Safety timeout 10 menit agar tidak stuck
 getters: signals, summary, allokasi, highPrioritySignals, criticalSignals,
          valasSummary,  // → report?.valas?.summary ?? { total_modal:0, total_nilai:0, total_pl:0, total_pl_pct:0 }
          valasItems     // → report?.valas?.items ?? []
@@ -439,7 +447,29 @@ getters: signals, summary, allokasi, highPrioritySignals, criticalSignals,
 // transactions.js
 state:   { transactions: [], loading: false }
 actions: fetchTransactions(), addTransaction(data)
+         // addTransaction(data):
+         //   POST /api/transactions →
+         //   reportStore.startPipelinePolling(Date.now()) →
+         //   fetchTransactions()
 ```
+
+---
+
+## 🏗️ ARSITEKTUR LOCAL-FIRST PORTFOLIO
+
+STB S905x mengalami Firestore gRPC timeout secara intermittent.
+`config/portfolio.json` adalah **single source of truth** untuk semua operasi portfolio.
+
+```
+READ:  local JSON → fallback Firestore (jika file tidak ada)
+WRITE: local JSON (sync) + Firestore (async background thread)
+```
+
+Implikasi untuk FE:
+- `GET /api/portfolio` selalu return dari local JSON — cepat, tidak timeout
+- Setelah `POST /api/portfolio` → data langsung available di GET berikutnya
+- Pipeline auto-trigger setelah transaksi & save portfolio (via `_trigger_pipeline_async()` di backend)
+- `reportStore.running` menunjukkan pipeline sedang berjalan — dipakai untuk pipeline banner di UI
 
 ---
 
@@ -595,10 +625,15 @@ generateSparklineData(changePct) // array 7 titik simulasi
 25. **avg_buy_price emas = harga per gram** — BUKAN total modal. Jangan biarkan user salah input. AssetFormModal sudah ada helper konversi total modal → per gram
 26. **PLPreviewModal deteksi perubahan** — saat menambah aset baru, tambahkan `detectChanges` untuk tipe baru, tambahkan ke `allChanges`, dan tambahkan baris di tabel perbandingan
 27. **SignalBadge map** — saat ada signal type baru dari backend, tambahkan ke map di `signalClass()` di SignalBadge.vue, jika tidak akan fallback ke styling 'hold' (kuning)
+28. **startPipelinePolling(Date.now())** dipanggil dari `portfolio.js` (setelah savePortfolio) dan `transactions.js` (setelah addTransaction) — jangan pakai setTimeout manual
+29. **reportStore.running** digunakan untuk pipeline status banner di UI — set via `startPipelinePolling()`, bukan di-set manual dari komponen
+30. **jenis_aset di transaksi selalu lowercase** — `"saham"`, `"reksa"`, `"emas"`, `"valas"` (backend field_map pakai key ini)
+31. **field timestamp di collection transactions** Firestore adalah `"timestamp"` — bukan `"tanggal"` atau `"date"`
+32. **Dropdown kode TransactionForm** diisi dari `portfolioStore` sesuai `jenis_aset` — bukan hardcoded atau dari watchlist
 
 ---
 
-_Last updated: 2026-06-05_
+_Last updated: 2026-06-11_
 _Design: "Deep Space & Neon Accents" — Command Center Dashboard_
 _Stack: Vue 3 + Vite + Pinia + Vue Router + Axios + Chart.js_
 _Font: Inter (UI) + JetBrains Mono (data angka)_

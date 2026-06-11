@@ -1,1 +1,0 @@
-function e(e,t){let n=e*.1,r=t*100;return r>0?Math.floor(n/r):0}function t(e=0,t=7){let n=[0,.4,-.25,.6,-.15,.45,0,-.3,.5,-.2],r=e/Math.max(t-1,1),i=Math.min(Math.abs(e)*.4,6);return Array.from({length:t},(e,t)=>50+r*t+(n[t%n.length]??0)*i)}export{e as n,t};
