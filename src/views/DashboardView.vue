@@ -286,8 +286,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
               <LoadingSpinner size="sm" />
             </div>
             <div v-else-if="emasItems.length === 0" class="ov-empty">Tidak ada data emas</div>
-            <div v-else class="ov-emas-grid">
-              <div v-for="item in emasItems" :key="item.id" class="ov-card ov-card--chart">
+            <div v-else class="asset-grid" :style="{ gridTemplateColumns: `repeat(${Math.min(emasItems.length, 3)}, 1fr)` }">
+              <div v-for="item in emasItems" :key="item.id" class="asset-mini-card">
                 <!-- Kiri: info -->
                 <div class="ov-card-info">
                   <div class="ov-card-title">{{ item.nama }}</div>
@@ -313,8 +313,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
                   <PriceSparkline
                     :data="goldSparklineData"
                     :changePct="goldChangePct"
-                    :width="100"
-                    :height="52"
+                    :width="120"
+                    :height="48"
                   />
                   <span class="ov-chart-label mono">
                     {{ goldChangePct >= 0 ? '▲' : '▼' }}{{ Math.abs(goldChangePct).toFixed(2) }}% hari ini
@@ -342,8 +342,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
               <LoadingSpinner size="sm" />
             </div>
             <div v-else-if="sahamItems.length === 0" class="ov-empty">Tidak ada data saham</div>
-            <div v-else class="ov-list">
-              <div v-for="item in sahamItems" :key="item.id" class="ov-card ov-card--chart">
+            <div v-else class="asset-grid" :style="{ gridTemplateColumns: `repeat(${Math.min(sahamItems.length, 3)}, 1fr)` }">
+              <div v-for="item in sahamItems" :key="item.id" class="asset-mini-card">
                 <!-- Kiri: info -->
                 <div class="ov-card-info">
                   <div class="ov-saham-top">
@@ -371,8 +371,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
                   <PriceSparkline
                     :data="generateSparklineData(item.change_pct ?? 0, 14)"
                     :changePct="item.change_pct ?? 0"
-                    :width="100"
-                    :height="52"
+                    :width="120"
+                    :height="48"
                   />
                   <span :class="['ov-chart-label mono', (item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
                     {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}% hari ini
@@ -395,8 +395,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
                   </span>
                 </span>
               </div>
-              <div class="ov-list">
-                <div v-for="item in valasItems" :key="item.id" class="ov-card ov-card--chart">
+              <div class="asset-grid" :style="{ gridTemplateColumns: `repeat(${Math.min(valasItems.length, 3)}, 1fr)` }">
+                <div v-for="item in valasItems" :key="item.id" class="asset-mini-card">
                   <!-- Kiri: info -->
                   <div class="ov-card-info">
                     <div class="ov-valas-top">
@@ -426,8 +426,8 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
                     <PriceSparkline
                       :data="generateSparklineData(item.change_pct ?? 0, 14)"
                       :changePct="item.change_pct ?? 0"
-                      :width="100"
-                      :height="52"
+                      :width="120"
+                      :height="48"
                     />
                     <span :class="['ov-chart-label mono', (item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
                       {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}% hari ini
@@ -754,18 +754,43 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   text-align: right;
 }
 
-/* Emas: 2-column card grid */
-.ov-emas-grid {
+/* Emas/Saham/Valas: grid, column count set via :style binding */
+.asset-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
+  width: 100%;
 }
 
-/* Saham/Valas: vertical list */
-.ov-list {
+.asset-mini-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Left column: text info */
+.asset-mini-card .ov-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Right column: sparkline — fixed width, never shrinks */
+.asset-mini-card .ov-card-chart {
+  flex-shrink: 0;
+  width: 120px;
+  border-left: 1px solid var(--border);
+  border-top: none;
+  padding-left: 12px;
+  padding-top: 0;
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
 }
 
 /* Item card */
@@ -1171,16 +1196,12 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   .ov-head-title  { font-size: 13px; }
   .ov-head-summary { font-size: 11px; }
 
-  /* Emas grid lebih rapat */
-  .ov-emas-grid   { gap: 8px; }
-
-  /* Item cards lebih kecil */
-  .ov-card        { padding: 9px 11px; }
+  /* Asset grid */
+  .asset-grid     { gap: 10px; }
   .ov-card-title  { font-size: 13px; }
   .ov-card-sub    { font-size: 10px; margin-top: 1px; }
   .ov-saham-top   { margin-bottom: 5px; }
   .ov-valas-top   { margin-bottom: 5px; }
-  .ov-list        { gap: 6px; }
 
   /* Metrics dalam card */
   .ov-metrics     { gap: 14px; margin-top: 7px; }
@@ -1201,26 +1222,14 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   .content  { padding: 12px; gap: 10px; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .skeleton-stat-grid { grid-template-columns: repeat(2, 1fr); }
-  .ov-emas-grid { grid-template-columns: 1fr; }
+  .asset-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .asset-mini-card .ov-card-chart { width: 80px; padding-left: 8px; }
   .ov-head  { flex-direction: column; align-items: flex-start; }
   .ov-head-summary { text-align: left; }
   .ov-reksa-dual { grid-template-columns: 1fr; }
   .ov-reksa-thead,
   .ov-reksa-row { gap: 6px; padding: 8px 10px; }
   .ov-reksa-nama { font-size: 11px; }
-
-  .ov-card--chart {
-    grid-template-columns: 1fr;
-  }
-  .ov-card-chart {
-    border-left: none;
-    border-top: 1px solid var(--border);
-    padding-left: 0;
-    padding-top: 10px;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
 
   .signal-banner { flex-direction: column; align-items: stretch; gap: 8px; }
   .btn-banner { min-height: 44px; justify-content: center; display: flex; align-items: center; }
