@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useMarketStore } from '@/stores/market'
 
 const props = defineProps({
@@ -16,10 +16,32 @@ const props = defineProps({
 const marketStore = useMarketStore()
 const lastSync = computed(() => marketStore.lastSync)
 
-// Prepend "// " if subtitle doesn't start with it
 const formattedSubtitle = computed(() => {
   if (!props.subtitle) return ''
   return props.subtitle.startsWith('//') ? props.subtitle : `// ${props.subtitle}`
+})
+
+// ── Jam WIB real-time ──
+const currentTime = ref('')
+
+function updateClock() {
+  const now = new Date()
+  const wib = new Date(now.getTime() + (7 * 60 * 60 * 1000))
+  const h = String(wib.getUTCHours()).padStart(2, '0')
+  const m = String(wib.getUTCMinutes()).padStart(2, '0')
+  const s = String(wib.getUTCSeconds()).padStart(2, '0')
+  currentTime.value = `${h}:${m}:${s}`
+}
+
+let clockInterval = null
+
+onMounted(() => {
+  updateClock()
+  clockInterval = setInterval(updateClock, 1000)
+})
+
+onUnmounted(() => {
+  clearInterval(clockInterval)
 })
 </script>
 
@@ -31,6 +53,10 @@ const formattedSubtitle = computed(() => {
     </div>
 
     <div class="topbar-right">
+      <span class="topbar-clock">
+        <span class="clock-time">{{ currentTime }}</span>
+        <span class="clock-label">WIB</span>
+      </span>
       <span class="sync-info">
         <span class="sync-dot" />
         <span class="sync-label">sync {{ lastSync }}</span>
@@ -85,6 +111,30 @@ const formattedSubtitle = computed(() => {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+}
+
+.topbar-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-right: 12px;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+}
+
+.clock-time {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  letter-spacing: 0.5px;
+}
+
+.clock-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 1px;
 }
 
 .sync-info {

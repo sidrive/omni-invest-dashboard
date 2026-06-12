@@ -343,40 +343,38 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
             </div>
             <div v-else-if="sahamItems.length === 0" class="ov-empty">Tidak ada data saham</div>
             <div v-else class="asset-grid" :style="{ gridTemplateColumns: `repeat(${Math.min(sahamItems.length, 3)}, 1fr)` }">
-              <div v-for="item in sahamItems" :key="item.id" class="asset-mini-card">
-                <!-- Kiri: info -->
-                <div class="ov-card-info">
-                  <div class="ov-saham-top">
-                    <div>
-                      <div class="ov-card-title mono clr-accent">{{ item.ticker?.replace('.JK', '') }}</div>
-                      <div class="ov-card-sub">{{ item.nama }}</div>
-                    </div>
-                    <span class="ov-lot mono">{{ item.qty_lot }} Lot</span>
+              <div v-for="item in sahamItems" :key="item.id" class="saham-card">
+                <!-- Kiri: info aset -->
+                <div class="saham-info">
+                  <div class="saham-nama">
+                    <span class="mono clr-accent">{{ item.ticker?.replace('.JK', '') }}</span>
+                    <span class="lot-badge mono">{{ item.qty_lot }} Lot</span>
                   </div>
-                  <div class="ov-metrics">
-                    <div class="ov-metric">
-                      <span class="ov-metric-lbl">Nilai</span>
-                      <span class="ov-metric-val mono">{{ formatRupiah(item.nilai_pasar) }}</span>
-                    </div>
-                    <div class="ov-metric">
-                      <span class="ov-metric-lbl">Return</span>
-                      <span :class="['ov-metric-val mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
-                        {{ fmtPL(item.pl) }} ({{ fmtPct(item.pl_pct) }})
-                      </span>
-                    </div>
+                  <div class="saham-sub">{{ item.nama }}</div>
+                  <div class="saham-nilai mono">{{ formatRupiah(item.nilai_pasar) }}</div>
+                </div>
+
+                <!-- Tengah: return -->
+                <div class="saham-return">
+                  <div :class="['saham-pl mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
+                    {{ fmtPL(item.pl) }}
+                  </div>
+                  <div :class="['saham-pct mono', item.pl > 0 ? 'clr-green' : item.pl < 0 ? 'clr-red' : 'clr-muted']">
+                    ({{ fmtPct(item.pl_pct) }})
+                  </div>
+                  <div class="saham-today mono clr-muted">
+                    {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}% hari ini
                   </div>
                 </div>
-                <!-- Kanan: grafik per saham -->
-                <div class="ov-card-chart">
+
+                <!-- Kanan: sparkline -->
+                <div class="saham-sparkline">
                   <PriceSparkline
                     :data="generateSparklineData(item.change_pct ?? 0, 14)"
                     :changePct="item.change_pct ?? 0"
-                    :width="120"
-                    :height="48"
+                    :width="80"
+                    :height="36"
                   />
-                  <span :class="['ov-chart-label mono', (item.change_pct ?? 0) >= 0 ? 'clr-green' : 'clr-red']">
-                    {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ Math.abs(item.change_pct ?? 0).toFixed(2) }}% hari ini
-                  </span>
                 </div>
               </div>
             </div>
@@ -858,20 +856,88 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   margin-top: 3px;
 }
 
-/* Saham card header row */
-.ov-saham-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+/* ── Saham card — 3 kolom: info | return | sparkline ── */
+.saham-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
 }
 
-.ov-lot {
-  font-size: 12px;
+.saham-info {
+  min-width: 0; /* prevent overflow */
+}
+
+.saham-nama {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.lot-badge {
+  font-size: 10px;
+  font-weight: 500;
   color: var(--text2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
   flex-shrink: 0;
-  padding-top: 2px;
+}
+
+.saham-sub {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.saham-nilai {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.saham-return {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.saham-pl {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.saham-pct {
+  font-size: 11px;
+}
+
+.saham-today {
+  font-size: 10px;
+  margin-top: 3px;
+}
+
+.saham-sparkline {
+  flex-shrink: 0;
+  width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 /* Valas card header row */
@@ -1200,8 +1266,16 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   .asset-grid     { gap: 10px; }
   .ov-card-title  { font-size: 13px; }
   .ov-card-sub    { font-size: 10px; margin-top: 1px; }
-  .ov-saham-top   { margin-bottom: 5px; }
   .ov-valas-top   { margin-bottom: 5px; }
+
+  /* Saham card kompak */
+  .saham-card  { padding: 10px 12px; gap: 10px; }
+  .saham-nama  { font-size: 13px; }
+  .saham-sub   { font-size: 10px; }
+  .saham-nilai { font-size: 12px; margin-top: 5px; }
+  .saham-pl    { font-size: 12px; }
+  .saham-pct   { font-size: 10px; }
+  .saham-today { font-size: 9px; }
 
   /* Metrics dalam card */
   .ov-metrics     { gap: 14px; margin-top: 7px; }
@@ -1224,6 +1298,11 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
   .skeleton-stat-grid { grid-template-columns: repeat(2, 1fr); }
   .asset-grid { grid-template-columns: repeat(2, 1fr) !important; }
   .asset-mini-card .ov-card-chart { width: 80px; padding-left: 8px; }
+
+  /* Saham card: info full-width di atas, return + sparkline di baris bawah */
+  .saham-card { grid-template-columns: 1fr auto; gap: 8px; padding: 12px; }
+  .saham-info { grid-column: 1 / -1; }
+  .saham-return { text-align: left; }
   .ov-head  { flex-direction: column; align-items: flex-start; }
   .ov-head-summary { text-align: left; }
   .ov-reksa-dual { grid-template-columns: 1fr; }

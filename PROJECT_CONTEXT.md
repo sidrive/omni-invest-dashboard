@@ -329,19 +329,19 @@ Form reksa dana punya field `rd_code` untuk auto-fetch NAB:
 
 Base URL: `import.meta.env.VITE_API_BASE_URL`
 
-| Method | Endpoint               | Deskripsi                           |
-| ------ | ---------------------- | ----------------------------------- |
-| GET    | `/api/portfolio`       | Ambil portofolio (dari local JSON, fallback Firestore) |
+| Method | Endpoint               | Deskripsi                                                             |
+| ------ | ---------------------- | --------------------------------------------------------------------- |
+| GET    | `/api/portfolio`       | Ambil portofolio (dari local JSON, fallback Firestore)                |
 | POST   | `/api/portfolio`       | Simpan portfolio lokal + async Firestore sync + auto-trigger pipeline |
-| GET    | `/api/market`          | Harga pasar terbaru                 |
-| GET    | `/api/report`          | Analyst report + sinyal             |
-| GET    | `/api/transactions`    | Riwayat transaksi                   |
-| POST   | `/api/transactions`    | Tambah transaksi + update avg cost portfolio + auto-trigger pipeline |
-| POST   | `/api/run`             | Trigger pipeline manual             |
-| GET    | `/api/gold-history`    | Historis harga emas harian          |
-| GET    | `/api/watchlist`       | Daftar saham & reksa dipantau       |
-| POST   | `/api/watchlist`       | Update watchlist                    |
-| POST   | `/api/validate-ticker` | Validasi ticker saham Yahoo Finance |
+| GET    | `/api/market`          | Harga pasar terbaru                                                   |
+| GET    | `/api/report`          | Analyst report + sinyal                                               |
+| GET    | `/api/transactions`    | Riwayat transaksi                                                     |
+| POST   | `/api/transactions`    | Tambah transaksi + update avg cost portfolio + auto-trigger pipeline  |
+| POST   | `/api/run`             | Trigger pipeline manual                                               |
+| GET    | `/api/gold-history`    | Historis harga emas harian                                            |
+| GET    | `/api/watchlist`       | Daftar saham & reksa dipantau                                         |
+| POST   | `/api/watchlist`       | Update watchlist                                                      |
+| POST   | `/api/validate-ticker` | Validasi ticker saham Yahoo Finance                                   |
 
 ### Struktur Response Penting
 
@@ -466,6 +466,7 @@ WRITE: local JSON (sync) + Firestore (async background thread)
 ```
 
 Implikasi untuk FE:
+
 - `GET /api/portfolio` selalu return dari local JSON — cepat, tidak timeout
 - Setelah `POST /api/portfolio` → data langsung available di GET berikutnya
 - Pipeline auto-trigger setelah transaksi & save portfolio (via `_trigger_pipeline_async()` di backend)
@@ -520,16 +521,16 @@ VITE_API_BASE_URL=http://192.168.192.81:4500/api
 
 ### Signal Logic
 
-| Signal       | Kondisi                            | Priority | Aset     |
-| ------------ | ---------------------------------- | -------- | -------- |
-| BUY          | harga ≤ support                    | high     | saham    |
-| AVG_DOWN     | harga turun ≥ 5% dari avg buy      | high     | saham    |
-| SELL         | harga ≥ resistance                 | medium   | saham    |
-| STOPLOSS     | harga ≤ stop loss                  | critical | saham    |
-| REBALANCE    | alokasi emas > GOLD_MAX_ALLOCATION | medium   | emas     |
-| DCA          | reksa dana selalu                  | normal   | reksa    |
-| SELL_PARTIAL | kurs saat ini ≥ threshold profit   | medium   | valas    |
-| DATA_ERROR   | gagal fetch kurs dari API          | normal   | valas    |
+| Signal       | Kondisi                            | Priority | Aset  |
+| ------------ | ---------------------------------- | -------- | ----- |
+| BUY          | harga ≤ support                    | high     | saham |
+| AVG_DOWN     | harga turun ≥ 5% dari avg buy      | high     | saham |
+| SELL         | harga ≥ resistance                 | medium   | saham |
+| STOPLOSS     | harga ≤ stop loss                  | critical | saham |
+| REBALANCE    | alokasi emas > GOLD_MAX_ALLOCATION | medium   | emas  |
+| DCA          | reksa dana selalu                  | normal   | reksa |
+| SELL_PARTIAL | kurs saat ini ≥ threshold profit   | medium   | valas |
+| DATA_ERROR   | gagal fetch kurs dari API          | normal   | valas |
 
 ### Kalkulasi P&L
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useReportStore } from '@/stores/report'
 
@@ -8,25 +8,11 @@ const reportStore = useReportStore()
 
 const signalCount = computed(() => reportStore.signalCount)
 
-// ── Clock WIB ──
-const clockStr = ref('--:--:--')
-let clockTimer = null
-
-onMounted(() => {
-  const tick = () => {
-    clockStr.value = new Date().toLocaleTimeString('id-ID', {
-      timeZone: 'Asia/Jakarta',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
-  }
-  tick()
-  clockTimer = setInterval(tick, 1000)
-})
-
-onUnmounted(() => clearInterval(clockTimer))
+// ── Collapse state ──
+// collapsed: dikontrol hover; pinned: toggle ☰ agar tetap expanded
+const collapsed = ref(true)
+const pinned = ref(false)
+const isCollapsed = computed(() => collapsed.value && !pinned.value)
 
 // ── Nav definition ──
 const sections = [
@@ -62,11 +48,23 @@ function isActive(to) {
 
 <template>
   <!-- ── Desktop sidebar ── -->
-  <aside class="sidebar">
+  <aside
+    :class="['sidebar', { 'sidebar--collapsed': isCollapsed }]"
+    @mouseenter="collapsed = false"
+    @mouseleave="collapsed = true"
+  >
     <!-- Logo -->
     <div class="sidebar-logo">
-      <span class="logo-tag">// v1.0.0</span>
-      <div class="logo-name">Omni-Invest<br /><span class="logo-sub">Sentinel</span></div>
+      <span class="logo-mark">⬡</span>
+      <div class="logo-text">
+        <span class="logo-tag">// v1.0.0</span>
+        <div class="logo-name">Omni-Invest<br /><span class="logo-sub">Sentinel</span></div>
+      </div>
+      <button
+        :class="['sidebar-toggle', { 'sidebar-toggle--pinned': pinned }]"
+        :title="pinned ? 'Lepas pin sidebar' : 'Pin sidebar tetap terbuka'"
+        @click="pinned = !pinned"
+      >☰</button>
     </div>
 
     <!-- Nav -->
@@ -77,6 +75,7 @@ function isActive(to) {
           v-for="item in section.items"
           :key="item.to"
           :to="item.to"
+          :title="isCollapsed ? item.label : undefined"
           :class="['nav-item', { active: isActive(item.to) }]"
         >
           <span class="nav-icon">{{ item.icon }}</span>
@@ -92,7 +91,6 @@ function isActive(to) {
         <span class="dot-live" />
         <span class="footer-status-text">STB ONLINE</span>
       </div>
-      <div class="footer-clock">{{ clockStr }} WIB</div>
     </div>
   </aside>
 
@@ -115,13 +113,40 @@ function isActive(to) {
   position: sticky;
   top: 0;
   z-index: 100;
-  overflow-y: auto;
+  overflow: hidden;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar--collapsed {
+  width: 52px;
 }
 
 /* Logo */
 .sidebar-logo {
-  padding: 20px 18px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 12px;
   border-bottom: 1px solid var(--glass-border);
+}
+
+.logo-mark {
+  font-size: 20px;
+  color: var(--accent);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar--collapsed .logo-text {
+  opacity: 0;
 }
 
 .logo-tag {
@@ -131,12 +156,12 @@ function isActive(to) {
   opacity: 0.7;
   letter-spacing: 1px;
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .logo-name {
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
   line-height: 1.3;
@@ -146,11 +171,43 @@ function isActive(to) {
   color: var(--accent);
 }
 
+.sidebar-toggle {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text2);
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, opacity 0.2s ease;
+}
+
+.sidebar-toggle:hover {
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.sidebar-toggle--pinned {
+  color: var(--accent);
+  border-color: rgba(0, 229, 160, 0.35);
+}
+
+.sidebar--collapsed .sidebar-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Nav */
 .sidebar-nav {
   flex: 1;
   padding: 12px 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-section-label {
@@ -159,6 +216,12 @@ function isActive(to) {
   letter-spacing: 2px;
   color: var(--text3);
   padding: 14px 18px 4px;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar--collapsed .nav-section-label {
+  opacity: 0;
 }
 
 .nav-item {
@@ -173,6 +236,10 @@ function isActive(to) {
   border-left: 2px solid transparent;
   transition: all 0.15s ease;
   position: relative;
+}
+
+.sidebar--collapsed .nav-item {
+  padding: 9px 14px;
 }
 
 .nav-item:hover {
@@ -195,6 +262,12 @@ function isActive(to) {
 
 .nav-label {
   flex: 1;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.sidebar--collapsed .nav-label {
+  opacity: 0;
 }
 
 .nav-badge {
@@ -208,12 +281,28 @@ function isActive(to) {
   padding: 1px 6px;
   min-width: 18px;
   text-align: center;
+  transition: all 0.2s ease;
+}
+
+/* Saat collapsed: badge menempel di pojok atas icon */
+.sidebar--collapsed .nav-badge {
+  position: absolute;
+  top: 2px;
+  left: 26px;
+  font-size: 9px;
+  padding: 0 4px;
+  min-width: 14px;
 }
 
 /* Footer */
 .sidebar-footer {
   padding: 14px 18px;
   border-top: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+.sidebar--collapsed .sidebar-footer {
+  padding: 14px 0;
 }
 
 .footer-status {
@@ -221,6 +310,12 @@ function isActive(to) {
   align-items: center;
   gap: 7px;
   margin-bottom: 4px;
+}
+
+.sidebar--collapsed .footer-status {
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 0;
 }
 
 .dot-live {
@@ -244,14 +339,15 @@ function isActive(to) {
   letter-spacing: 1.5px;
   color: var(--accent);
   font-weight: 700;
+  transition: opacity 0.2s ease;
 }
 
-.footer-clock {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text3);
-  letter-spacing: 0.5px;
+.sidebar--collapsed .footer-status-text {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
 }
+
 
 @media (max-width: 768px) {
   .sidebar { display: none; }
