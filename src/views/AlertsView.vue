@@ -19,7 +19,7 @@ const criticals = computed(() => reportStore.criticalSignals)
 const highs     = computed(() => reportStore.highPrioritySignals)
 
 const rebalanceCount = computed(() =>
-  signals.value.filter((s) => s.signal?.toUpperCase() === 'REBALANCE').length,
+  signals.value.filter(s => s.type?.toUpperCase() === 'REBALANCE').length,
 )
 
 const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
@@ -60,21 +60,15 @@ function signalIcon(s) {
 const showModal    = ref(false)
 const activePrefill = ref(null)
 
-function getMarketPrice(signalId) {
-  // Try signal's own market_price, fall back to saham items
-  const fromItems = reportStore.report?.saham?.items?.find((i) => i.id === signalId)
-  return fromItems?.market_price ?? 0
-}
-
 function openEksekusi(signal) {
-  const harga     = signal.market_price ?? getMarketPrice(signal.id)
+  const harga     = signal.harga ?? 0
   const totalAset = reportStore.summary?.total_nilai ?? 0
 
   activePrefill.value = {
     aset:          'saham',
-    aksi:          signal.signal?.toUpperCase() === 'AVG_DOWN' ? 'BUY' : signal.signal,
-    kode:          signal.id,
-    nama:          signal.nama ?? signal.id,
+    aksi:          signal.type?.toUpperCase() === 'AVG_DOWN' ? 'BUY' : signal.type,
+    kode:          signal.aset,
+    nama:          signal.aset,
     harga,
     qty_saran:     suggestLot(totalAset, harga),
     dana_tersedia: totalAset * 0.1,
@@ -165,39 +159,41 @@ onUnmounted(() => clearInterval(timer))
 
         <div
           v-for="signal in sortedSignals"
-          :key="signal.id + signal.signal"
+          :key="signal.aset + '_' + signal.type + '_' + signal.timestamp"
           :class="['signal-card', `priority-${signal.priority ?? 'normal'}`]"
         >
           <!-- Icon -->
           <div class="signal-icon-wrap">
-            <span class="signal-icon">{{ signalIcon(signal.signal) }}</span>
+            <span class="signal-icon">{{ signalIcon(signal.type) }}</span>
           </div>
 
           <!-- Body -->
           <div class="signal-body">
             <div class="signal-title">
-              <SignalBadge :signal="signal.signal ?? 'HOLD'" />
-              <span class="signal-asset">{{ signal.nama ?? signal.id }}</span>
+              <SignalBadge :signal="signal.type ?? 'HOLD'" />
+              <span class="signal-asset font-mono">{{ signal.aset }}</span>
+              <span class="signal-price font-mono" v-if="signal.harga > 0">
+                {{ formatRupiah(signal.harga) }}
+              </span>
             </div>
 
             <div class="signal-reason">
-              {{ signal.signal_reason || '—' }}
+              {{ signal.alasan || '—' }}
             </div>
 
             <div class="signal-meta-row">
               <span :class="['priority-badge', `badge-${signal.priority ?? 'normal'}`]">
                 {{ (signal.priority ?? 'normal').toUpperCase() }}
               </span>
-              <span class="signal-price" v-if="signal.market_price">
-                {{ formatRupiah(signal.market_price) }}
+              <span class="signal-ts mono">
+                {{ formatDateTime(signal.timestamp) }} WIB
               </span>
-              <span class="signal-ts mono">{{ analyzedAt }}</span>
             </div>
           </div>
 
           <!-- Eksekusi button (BUY / AVG_DOWN only) -->
           <div
-            v-if="['BUY', 'AVG_DOWN'].includes(signal.signal?.toUpperCase())"
+            v-if="['BUY', 'AVG_DOWN'].includes(signal.type?.toUpperCase())"
             class="signal-action"
           >
             <button class="btn-eksekusi" @click="openEksekusi(signal)">
