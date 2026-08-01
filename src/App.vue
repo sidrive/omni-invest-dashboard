@@ -4,15 +4,23 @@ import { RouterView } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ToastNotif from '@/components/ui/ToastNotif.vue'
+import StbDashboardView from '@/views/stb/StbDashboardView.vue'
 import { useToast } from '@/composables/useToast'
+import { useSTBMode } from '@/composables/useSTBMode'
 
 const { showToast } = useToast()
 // Provide for components that prefer inject('showToast')
 provide('showToast', showToast)
+
+// STB/kiosk (1024x768, tanpa mouse/keyboard) mengganti seluruh layout dengan
+// tampilan 2-panel statis — tidak lewat router, murni deteksi viewport
+// on-mount/on-resize sesuai design handoff.
+const { isSTB } = useSTBMode()
 </script>
 
 <template>
-  <div class="app-layout">
+  <StbDashboardView v-if="isSTB" />
+  <div v-else class="app-layout">
     <AppSidebar />
     <main class="app-main">
       <RouterView />

@@ -9,9 +9,11 @@ export const useMonitorStore = defineStore('monitor', () => {
   const clusters = ref([])
   const loading = ref(false)
   const error = ref(null)
+  const lastSyncAt = ref(null)
   let pollingTimer = null
 
   // ── Getters ──
+  const online = computed(() => !error.value && lastSyncAt.value != null)
   const totalCount = computed(() => clients.value.length)
   const onlineCount = computed(() => clients.value.filter((c) => c.status === 'online').length)
   const offlineCount = computed(() => clients.value.filter((c) => c.status === 'offline').length)
@@ -40,6 +42,7 @@ export const useMonitorStore = defineStore('monitor', () => {
     try {
       const res = await getClients()
       clients.value = Array.isArray(res.data?.data) ? res.data.data : []
+      lastSyncAt.value = new Date()
     } catch (err) {
       console.error('[MONITOR_FETCH_CLIENTS_ERROR]', err)
       error.value = 'Backend Zakanet tidak dapat dihubungi'
@@ -86,6 +89,8 @@ export const useMonitorStore = defineStore('monitor', () => {
     clusters,
     loading,
     error,
+    lastSyncAt,
+    online,
     totalCount,
     onlineCount,
     offlineCount,
