@@ -13,6 +13,7 @@ import StockMiniChart   from '@/components/charts/StockMiniChart.vue'
 import ValasMiniChart   from '@/components/charts/ValasMiniChart.vue'
 import PriceSparkline   from '@/components/charts/PriceSparkline.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import ZakanetMonitorSection from '@/components/monitor/ZakanetMonitorSection.vue'
 import { formatRupiah, formatJuta, formatPct, formatDateTime } from '@/utils/formatters'
 import { generateSparklineData } from '@/utils/calculator'
 
@@ -613,6 +614,9 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
           </template>
         </div>
       </div>
+
+      <!-- 6 ─ Zakanet Monitor -->
+      <ZakanetMonitorSection />
 
     </div><!-- /content -->
   </div>

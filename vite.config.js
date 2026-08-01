@@ -7,6 +7,9 @@ export default defineConfig(({ mode }) => {
   const apiBase = env.VITE_API_BASE_URL || 'http://192.168.192.81:4500'
   const apiOrigin = apiBase.replace(/\/api$/, '')
 
+  const zakanetApiBase = env.VITE_ZAKANET_API_BASE_URL || ''
+  const zakanetApiOrigin = zakanetApiBase.replace(/\/api$/, '')
+
   return {
     plugins: [vue()],
     resolve: {
@@ -20,6 +23,13 @@ export default defineConfig(({ mode }) => {
           target: apiOrigin,
           changeOrigin: true,
         },
+        ...(zakanetApiOrigin && {
+          '/zakanet-api': {
+            target: zakanetApiOrigin,
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/zakanet-api/, '/api'),
+          },
+        }),
       },
     },
     build: {
