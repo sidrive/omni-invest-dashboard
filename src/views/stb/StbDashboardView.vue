@@ -11,13 +11,6 @@ import { generateSparklineData } from '@/utils/calculator'
 import { timeAgo } from '@/utils/time'
 import PriceSparkline from '@/components/charts/PriceSparkline.vue'
 
-const props = defineProps({
-  // Faktor scale dari App.vue (useSTBMode) — device STB nyata melaporkan
-  // window.innerWidth/innerHeight berbeda dari resolusi fisik 1024x768,
-  // jadi frame ini di-letterbox-scale supaya tetap mengisi penuh layar.
-  scale: { type: Number, default: 1 },
-})
-
 const reportStore = useReportStore()
 const marketStore = useMarketStore()
 const monitorStore = useMonitorStore()
@@ -73,7 +66,7 @@ onUnmounted(() => {
 
 <template>
   <div class="stb-viewport">
-  <div class="stb-frame" :style="{ transform: `scale(${props.scale})` }">
+  <div class="stb-frame">
     <!-- ── LEFT: Omni-Invest ── -->
     <div class="stb-pane stb-pane--invest">
       <div class="stb-header">
@@ -256,28 +249,27 @@ onUnmounted(() => {
 .dot-online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .dot-offline { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
 
-/* Viewport asli: full-screen, tempat frame 1024x768 di-letterbox-scale &
-   dipusatkan. Dibutuhkan karena hardware STB nyata ternyata melaporkan
-   window.innerWidth/innerHeight berbeda dari resolusi fisik panelnya
-   (lihat useSTBMode.js) — kalau tidak di-scale, frame cuma mengisi pojok
-   kiri-atas layar dan menyisakan area kosong di kanan/bawah. */
+/* Viewport asli: full-screen. Frame di bawah mengisi 100% dari ini secara
+   fluid (BUKAN transform:scale() lagi — sempat dicoba untuk letterbox frame
+   fixed 1024x768 ke viewport asli device, tapi Leaflet di dalam ancestor
+   yang di-scale ternyata salah hitung zoom fitBounds() di hardware STB
+   nyata, walau sudah invalidateSize(). Fluid layout menghindari masalah itu
+   sepenuhnya karena container peta selalu dapat ukuran piksel asli tanpa
+   transform apa pun di ancestor-nya). */
 .stb-viewport {
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--bg);
   overflow: hidden;
 }
 
-/* Frame tetap didesain fixed 1024x768 (sesuai design handoff — bukan layout
-   fluid), lalu di-scale via transform dari App.vue supaya pas viewport asli. */
+/* Proporsi kiri:kanan (614:410, ~60:40) dari design asli dipertahankan lewat
+   flex-grow, bukan lebar piksel tetap — supaya fluid mengikuti viewport asli
+   device apa pun ukurannya. */
 .stb-frame {
-  width: 1024px;
-  height: 768px;
-  flex: none;
-  transform-origin: center center;
+  width: 100%;
+  height: 100%;
   display: flex;
   background: var(--bg);
   color: var(--text);
@@ -287,8 +279,8 @@ onUnmounted(() => {
 }
 
 .stb-pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.stb-pane--invest  { flex: 0 0 614px; padding: 14px 16px; gap: 10px; }
-.stb-pane--monitor { flex: 0 0 410px; padding: 14px 16px; gap: 10px; border-left: 1px solid var(--border); }
+.stb-pane--invest  { flex: 614 1 0; padding: 14px 16px; gap: 10px; }
+.stb-pane--monitor { flex: 410 1 0; padding: 14px 16px; gap: 10px; border-left: 1px solid var(--border); }
 
 .stb-header { flex: none; }
 .stb-title-row { display: flex; align-items: center; justify-content: space-between; }

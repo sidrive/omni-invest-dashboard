@@ -15,11 +15,11 @@ provide('showToast', showToast)
 // STB/kiosk (1024x768, tanpa mouse/keyboard) mengganti seluruh layout dengan
 // tampilan 2-panel statis — tidak lewat router, murni deteksi viewport
 // on-mount/on-resize sesuai design handoff.
-const { isSTB, scale } = useSTBMode()
+const { isSTB } = useSTBMode()
 </script>
 
 <template>
-  <StbDashboardView v-if="isSTB" :scale="scale" />
+  <StbDashboardView v-if="isSTB" />
   <div v-else class="app-layout">
     <AppSidebar />
     <main class="app-main">
