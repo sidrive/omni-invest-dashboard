@@ -13,6 +13,8 @@ import StockMiniChart   from '@/components/charts/StockMiniChart.vue'
 import ValasMiniChart   from '@/components/charts/ValasMiniChart.vue'
 import PriceSparkline   from '@/components/charts/PriceSparkline.vue'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
+import ZakanetMonitorSection from '@/components/monitor/ZakanetMonitorSection.vue'
+import { usePortfolioOverview } from '@/composables/usePortfolioOverview'
 import { formatRupiah, formatJuta, formatPct, formatDateTime } from '@/utils/formatters'
 import { generateSparklineData } from '@/utils/calculator'
 
@@ -20,9 +22,16 @@ const router = useRouter()
 const reportStore = useReportStore()
 const marketStore = useMarketStore()
 
+const {
+  summary, allokasi,
+  emasItems, emasTotal,
+  sahamItems, sahamTotal,
+  valasItems, valasSummary,
+  reksaItems, reksaNaik, reksaTurun, reksaTotal, reksaNaikTotal, reksaTurunTotal,
+  FLAG_MAP, formatQtyValas, fmtPL, fmtPct,
+} = usePortfolioOverview()
+
 // ── Derived state ──────────────────────────────────────────────
-const summary   = computed(() => reportStore.summary)
-const allokasi  = computed(() => reportStore.allokasi)
 const signals   = computed(() => reportStore.signals)
 const criticals = computed(() => reportStore.criticalSignals)
 const highs     = computed(() => reportStore.highPrioritySignals)
@@ -41,71 +50,9 @@ const emasAktual   = computed(() => allokasi.value?.aktual?.emas ?? 0)
 const emasTarget   = computed(() => allokasi.value?.target?.emas ?? 25)
 const isEmasOver   = computed(() => emasAktual.value > emasTarget.value)
 
-const valasSummary = computed(() => reportStore.valasSummary)
-
-const FLAG_MAP = { USD: '🇺🇸', SGD: '🇸🇬', EUR: '🇪🇺', JPY: '🇯🇵' }
-
-// ── Emas ──────────────────────────────────────────────────────
-const emasMarket = computed(() => marketStore.market?.emas ?? null)
-const emasItems  = computed(() => reportStore.report?.emas?.items ?? [])
-const emasTotal  = computed(() => {
-  const modal = emasItems.value.reduce((s, i) => s + (i.modal ?? 0), 0)
-  const pl    = emasItems.value.reduce((s, i) => s + (i.pl ?? 0), 0)
-  const nilai = emasItems.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0)
-  return { modal, pl, nilai, pl_pct: modal > 0 ? (pl / modal) * 100 : 0 }
-})
-
 // Sparkline emas — 1 data set mewakili semua posisi
 const goldSparklineData = computed(() => marketStore.goldSparklineData ?? [])
 const goldChangePct     = computed(() => marketStore.goldChangePct ?? 0)
-
-// ── Saham ─────────────────────────────────────────────────────
-const sahamItems = computed(() => reportStore.report?.saham?.items ?? [])
-const sahamTotal = computed(() => {
-  const modal = sahamItems.value.reduce((s, i) => s + (i.modal ?? 0), 0)
-  const pl    = sahamItems.value.reduce((s, i) => s + (i.pl ?? 0), 0)
-  const nilai = sahamItems.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0)
-  return { modal, pl, nilai, pl_pct: modal > 0 ? (pl / modal) * 100 : 0 }
-})
-
-// ── Valas ─────────────────────────────────────────────────────
-const valasItems = computed(() => reportStore.valasItems)
-
-const formatQtyValas = (code, qty) => {
-  if (qty == null) return '—'
-  if (code === 'JPY') return Math.round(qty).toLocaleString('id-ID')
-  return qty.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-// ── Reksa Dana ────────────────────────────────────────────────
-const reksaItems  = computed(() => reportStore.report?.reksadana?.items ?? [])
-const reksaNaik   = computed(() => reksaItems.value.filter(i => (i.pl ?? 0) > 0))
-const reksaTurun  = computed(() => reksaItems.value.filter(i => (i.pl ?? 0) <= 0))
-const reksaTotal  = computed(() => {
-  const modal = reksaItems.value.reduce((s, i) => s + (i.modal ?? 0), 0)
-  const pl    = reksaItems.value.reduce((s, i) => s + (i.pl ?? 0), 0)
-  const nilai = reksaItems.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0)
-  return { modal, pl, nilai, pl_pct: modal > 0 ? (pl / modal) * 100 : 0 }
-})
-const reksaNaikTotal = computed(() => ({
-  nilai: reksaNaik.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0),
-  pl:    reksaNaik.value.reduce((s, i) => s + (i.pl ?? 0), 0),
-}))
-const reksaTurunTotal = computed(() => ({
-  nilai: reksaTurun.value.reduce((s, i) => s + (i.nilai_pasar ?? 0), 0),
-  pl:    reksaTurun.value.reduce((s, i) => s + (i.pl ?? 0), 0),
-}))
-
-// ── P&L format helper ─────────────────────────────────────────
-// Returns "+Rp1.234" for positive, "-Rp1.234" for negative, "Rp0" for zero
-const fmtPL = (n) => {
-  if (!n || n === 0) return formatRupiah(0)
-  return (n > 0 ? '+' : '-') + formatRupiah(Math.abs(n))
-}
-const fmtPct = (n) => {
-  if (!n) return '0.00%'
-  return (n > 0 ? '+' : '') + Number(n).toFixed(2) + '%'
-}
 
 // ── Price History Charts ──────────────────────────────────────
 const valasRates = computed(() => {
@@ -613,6 +560,9 @@ const isFirstLoad = computed(() => reportStore.loading && !reportStore.report)
           </template>
         </div>
       </div>
+
+      <!-- 6 ─ Zakanet Monitor -->
+      <ZakanetMonitorSection />
 
     </div><!-- /content -->
   </div>
