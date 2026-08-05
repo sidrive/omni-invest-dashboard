@@ -50,8 +50,20 @@ function popupContent(c) {
 
 function fitToClients(clients) {
   if (!map || !clients.length) return
+  // Paksa Leaflet re-baca ukuran container sebelum fitBounds — kalau tidak,
+  // di beberapa perangkat (khususnya saat map berada di dalam ancestor yang
+  // di-`transform: scale()` untuk letterbox STB, atau saat container belum
+  // selesai layout ketika map pertama kali dibuat) Leaflet bisa memakai
+  // ukuran container yang salah/basi, sehingga zoom hasil fitBounds jadi
+  // terlalu jauh dan node-node kelihatan menumpuk.
+  map.invalidateSize()
   const bounds = L.latLngBounds(clients.map((c) => [c.lat, c.lng]))
   map.fitBounds(bounds, { padding: [32, 32], maxZoom: 17 })
+}
+
+let resizeObserver = null
+function handleWindowResize() {
+  map?.invalidateSize()
 }
 
 onMounted(() => {
@@ -75,9 +87,21 @@ onMounted(() => {
     fitToClients(store.clients)
     hasFitted = true
   }
+
+  // Re-invalidate kalau ukuran container berubah setelah map dibuat (mis.
+  // frame STB di-scale ulang saat resize, atau layout flex baru selesai
+  // sesaat setelah mount di perangkat yang lebih lambat).
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => map?.invalidateSize())
+    resizeObserver.observe(mapEl.value)
+  }
+  window.addEventListener('resize', handleWindowResize)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', handleWindowResize)
+  resizeObserver?.disconnect()
+  resizeObserver = null
   map?.remove()
   map = null
 })
