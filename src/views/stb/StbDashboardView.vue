@@ -11,6 +11,13 @@ import { generateSparklineData } from '@/utils/calculator'
 import { timeAgo } from '@/utils/time'
 import PriceSparkline from '@/components/charts/PriceSparkline.vue'
 
+const props = defineProps({
+  // Faktor scale dari App.vue (useSTBMode) — device STB nyata melaporkan
+  // window.innerWidth/innerHeight berbeda dari resolusi fisik 1024x768,
+  // jadi frame ini di-letterbox-scale supaya tetap mengisi penuh layar.
+  scale: { type: Number, default: 1 },
+})
+
 const reportStore = useReportStore()
 const marketStore = useMarketStore()
 const monitorStore = useMonitorStore()
@@ -65,7 +72,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="stb-frame">
+  <div class="stb-viewport">
+  <div class="stb-frame" :style="{ transform: `scale(${props.scale})` }">
     <!-- ── LEFT: Omni-Invest ── -->
     <div class="stb-pane stb-pane--invest">
       <div class="stb-header">
@@ -233,6 +241,7 @@ onUnmounted(() => {
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <style scoped>
@@ -246,11 +255,28 @@ onUnmounted(() => {
 .dot-online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .dot-offline { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
 
-/* Frame 1024x768 tetap (bukan discale) — sesuai catatan design handoff:
-   perangkat STB target melaporkan resolusi ini persis. */
+/* Viewport asli: full-screen, tempat frame 1024x768 di-letterbox-scale &
+   dipusatkan. Dibutuhkan karena hardware STB nyata ternyata melaporkan
+   window.innerWidth/innerHeight berbeda dari resolusi fisik panelnya
+   (lihat useSTBMode.js) — kalau tidak di-scale, frame cuma mengisi pojok
+   kiri-atas layar dan menyisakan area kosong di kanan/bawah. */
+.stb-viewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+/* Frame tetap didesain fixed 1024x768 (sesuai design handoff — bukan layout
+   fluid), lalu di-scale via transform dari App.vue supaya pas viewport asli. */
 .stb-frame {
   width: 1024px;
   height: 768px;
+  flex: none;
+  transform-origin: center center;
   display: flex;
   background: var(--bg);
   color: var(--text);

@@ -5,7 +5,6 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ToastNotif from '@/components/ui/ToastNotif.vue'
 import StbDashboardView from '@/views/stb/StbDashboardView.vue'
-import ViewportDebugBadge from '@/components/ui/ViewportDebugBadge.vue'
 import { useToast } from '@/composables/useToast'
 import { useSTBMode } from '@/composables/useSTBMode'
 
@@ -16,11 +15,11 @@ provide('showToast', showToast)
 // STB/kiosk (1024x768, tanpa mouse/keyboard) mengganti seluruh layout dengan
 // tampilan 2-panel statis — tidak lewat router, murni deteksi viewport
 // on-mount/on-resize sesuai design handoff.
-const { isSTB } = useSTBMode()
+const { isSTB, scale } = useSTBMode()
 </script>
 
 <template>
-  <StbDashboardView v-if="isSTB" />
+  <StbDashboardView v-if="isSTB" :scale="scale" />
   <div v-else class="app-layout">
     <AppSidebar />
     <main class="app-main">
@@ -29,8 +28,6 @@ const { isSTB } = useSTBMode()
     <AppBottomNav />
     <ToastNotif />
   </div>
-  <!-- TEMP DEBUG: lihat komentar di ViewportDebugBadge.vue -->
-  <ViewportDebugBadge />
 </template>
 
 <style>
