@@ -27,7 +27,7 @@ const {
   emasItems, emasTotal,
   sahamItems, sahamTotal,
   valasItems, valasSummary,
-  reksaNaik, reksaTurun, reksaTotal, reksaNaikTotal, reksaTurunTotal,
+  reksaItems, reksaNaik, reksaTurun, reksaTotal, reksaNaikTotal, reksaTurunTotal,
   FLAG_MAP, formatQtyValas, fmtPL, fmtPct,
 } = usePortfolioOverview()
 
