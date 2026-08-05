@@ -125,7 +125,8 @@ onUnmounted(() => {
           <div v-for="item in sahamItems" :key="item.id" class="stb-row">
             <div class="stb-row-info">
               <div class="stb-row-name">
-                <span class="mono clr-accent">{{ item.ticker?.replace('.JK', '') }}</span>
+                <span v-if="item.ticker" class="mono clr-accent">{{ item.ticker.replace('.JK', '') }}</span>
+                <span class="stb-row-nama">{{ item.nama }}</span>
                 <span class="stb-lot mono">{{ item.qty_lot }} Lot</span>
               </div>
               <div class="stb-row-nilai mono">{{ formatRupiah(item.nilai_pasar) }}</div>
@@ -331,6 +332,7 @@ onUnmounted(() => {
 }
 .stb-row-info { min-width: 0; }
 .stb-row-name { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stb-row-nama { font-size: 10px; font-weight: 400; color: var(--text2); margin-left: 6px; }
 .stb-lot { font-size: 9px; color: var(--text3); margin-left: 5px; }
 .stb-row-nilai { font-size: 10px; color: var(--text2); margin-top: 1px; }
 .stb-row-pl { font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; }
