@@ -5,6 +5,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppBottomNav from '@/components/layout/AppBottomNav.vue'
 import ToastNotif from '@/components/ui/ToastNotif.vue'
 import StbDashboardView from '@/views/stb/StbDashboardView.vue'
+import ViewportDebugBadge from '@/components/ui/ViewportDebugBadge.vue'
 import { useToast } from '@/composables/useToast'
 import { useSTBMode } from '@/composables/useSTBMode'
 
@@ -28,6 +29,8 @@ const { isSTB } = useSTBMode()
     <AppBottomNav />
     <ToastNotif />
   </div>
+  <!-- TEMP DEBUG: lihat komentar di ViewportDebugBadge.vue -->
+  <ViewportDebugBadge />
 </template>
 
 <style>
