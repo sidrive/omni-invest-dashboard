@@ -11,7 +11,12 @@ export const useMarketStore = defineStore('market', () => {
   const goldHistory = ref([])
 
   // ── Getters ──
-  const goldPrice = computed(() => market.value?.emas?.price ?? null)
+  // Field aslinya `antam_per_gram` (lihat scavenger/gold_fetcher.py di repo
+  // backend) — bukan `price`. Field `price` itu tidak pernah ada di response,
+  // jadi goldPrice selalu null sebelum ini (bikin ScavengerView.vue salah
+  // nampilin status "ERROR" terus-terusan walau fetch-nya sukses, dan
+  // GoldHistoryChart.vue selalu nampilin Rp0/g).
+  const goldPrice = computed(() => market.value?.emas?.antam_per_gram ?? null)
 
   // Response shape: market.saham.stocks = [{ ticker, price, change_pct, ... }]
   const stockList = computed(() => market.value?.saham?.stocks ?? [])

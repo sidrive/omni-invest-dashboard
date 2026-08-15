@@ -22,7 +22,11 @@ const fetchedAt = computed(() =>
 )
 
 // ── Data Sources ──────────────────────────────────────────────
-const emasStatus  = computed(() => marketStore.goldPrice ? 'ok'   : 'err')
+// Pakai field `status` asli dari backend ("success"/"fallback"/"error"),
+// bukan cuma truthy-check goldPrice — fallback tetap mengisi antam_per_gram
+// (angka lama), jadi truthy-check saja akan salah nampilin fallback sebagai OK.
+const emasSourceLabel = computed(() => marketStore.market?.emas?.source || 'logammulia.com')
+const emasStatus = computed(() => marketStore.market?.emas?.status === 'success' ? 'ok' : 'err')
 const sahamStatus = computed(() => {
   const n = marketStore.stockList.length
   return n === 0 ? 'err' : 'ok'
@@ -144,7 +148,7 @@ onMounted(async () => {
           <!-- Harga Emas -->
           <div class="source-row">
             <span class="source-name">🥇 Harga Emas</span>
-            <span class="source-url mono">logammulia.com</span>
+            <span class="source-url mono">{{ emasSourceLabel }}</span>
             <span>
               <span :class="['health-badge', `health-${emasStatus}`]">
                 {{ emasStatus === 'ok' ? 'OK' : 'ERROR' }}
