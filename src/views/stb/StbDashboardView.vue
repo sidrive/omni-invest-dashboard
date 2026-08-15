@@ -107,8 +107,10 @@ onUnmounted(() => {
       <!-- ── LEFT: Omni-Invest ── -->
       <div class="stb-pane stb-pane--invest">
         <div class="stb-header">
-          <div class="stb-title">Omni-Invest</div>
-          <div class="stb-clock mono">{{ clockStr }}</div>
+          <div class="stb-title-row">
+            <span class="stb-title">Omni-Invest</span>
+            <span class="stb-clock mono">{{ clockStr }}</span>
+          </div>
         </div>
 
         <div class="stb-stat-grid">
@@ -368,7 +370,8 @@ onUnmounted(() => {
 .stb-header { flex: none; }
 .stb-title-row { display: flex; align-items: center; justify-content: space-between; }
 .stb-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: var(--stb-text); }
-.stb-clock { font-size: 12px; color: var(--stb-text3); }
+/* Diperbesar & kontras dinaikkan supaya kebaca dari jarak jauh di kiosk. */
+.stb-clock { font-size: 26px; font-weight: 700; color: var(--stb-text); }
 .stb-sync  { font-size: 11px; color: var(--stb-text3); margin-top: -6px; }
 
 .stb-live-badge {
