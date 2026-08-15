@@ -43,13 +43,14 @@ export const getTransactions = () => api.get('/transactions')
 export const addTransaction = (data) => api.post('/transactions', data)
 
 // --- Pipeline ---
-// /api/run menjalankan seluruh pipeline (Scavenger+Analyst+Messenger) SECARA
-// SINKRON di backend — baru response setelah semuanya selesai. Di hardware
-// yang lebih lambat (STB Armbian) ini bisa lebih dari 15 detik (default
-// timeout instance `api`), jadi browser membatalkan request duluan padahal
-// backend-nya sendiri tetap jalan & akan berhasil. Kasih timeout jauh lebih
-// longgar khusus untuk panggilan ini saja.
-export const runPipeline = () => api.post('/run', null, { timeout: 120000 })
+// /api/run sekarang async di backend — balas cepat begitu pipeline mulai
+// jalan di background thread (bukan lagi nunggu Scavenger+Analyst+Messenger
+// selesai sebelum respons, yang dulu gampang lebih dari 15 detik di
+// hardware STB dan bikin browser membatalkan request duluan). Progress
+// dipantau lewat polling getRunStatus() / getReport(), lihat
+// stores/report.js:runPipeline() + startPipelinePolling().
+export const runPipeline = () => api.post('/run')
+export const getRunStatus = () => api.get('/run/status')
 
 // --- Watchlist ---
 export const getWatchlist = () => api.get('/watchlist')

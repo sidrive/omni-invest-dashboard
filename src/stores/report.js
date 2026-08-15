@@ -64,18 +64,19 @@ export const useReportStore = defineStore('report', () => {
   }
 
   async function runPipeline() {
-    running.value = true
     error.value = null
     try {
-      await apiRun()
-      // Tunggu pipeline selesai lalu refresh report
-      await fetchReport()
-      return { ok: true }
+      const sinceTimestamp = Date.now()
+      const res = await apiRun()
+      // Backend sekarang balas begitu pipeline mulai di background thread
+      // (bukan nunggu Scavenger+Analyst+Messenger selesai) — pantau
+      // kelarnya lewat polling report yang sudah ada, sama seperti
+      // auto-trigger setelah simpan portfolio/transaksi.
+      startPipelinePolling(sinceTimestamp)
+      return { ok: true, message: res.data?.message }
     } catch (e) {
       error.value = e.message
       return { ok: false, message: e.message }
-    } finally {
-      running.value = false
     }
   }
 

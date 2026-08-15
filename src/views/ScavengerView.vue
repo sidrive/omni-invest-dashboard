@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, watch, onMounted } from 'vue'
 import { useMarketStore } from '@/stores/market'
 import { useReportStore } from '@/stores/report'
 import { useToast } from '@/composables/useToast'
@@ -40,15 +40,31 @@ const sahamValueLabel = computed(() => {
 })
 
 // ── Manual Fetch ──────────────────────────────────────────────
+// runPipeline() sekarang cuma MEMULAI pipeline di backend (async, balas
+// cepat) — bukan menunggu sampai selesai. Progress sesungguhnya dipantau
+// lewat reportStore.running (di-toggle oleh startPipelinePolling), jadi
+// toast "selesai"-nya menunggu watch di bawah, bukan langsung dari hasil
+// await ini.
 async function runPipeline() {
   const result = await reportStore.runPipeline()
   if (result.ok) {
-    await marketStore.fetchMarket()
-    showToast('Pipeline selesai! Data terbaru dimuat.', 'success')
+    showToast(result.message ?? 'Pipeline dimulai, sedang diperbarui...', 'info')
   } else {
     showToast(result.message ?? 'Pipeline gagal dijalankan', 'error')
   }
 }
+
+// Begitu polling mendeteksi pipeline selesai (running: true -> false),
+// refresh market & kasih toast selesai.
+watch(
+  () => reportStore.running,
+  async (isRunning, wasRunning) => {
+    if (wasRunning && !isRunning) {
+      await marketStore.fetchMarket()
+      showToast('Pipeline selesai! Data terbaru dimuat.', 'success')
+    }
+  },
+)
 
 // ── JSON syntax highlighting ──────────────────────────────────
 function highlightJSON(obj) {
