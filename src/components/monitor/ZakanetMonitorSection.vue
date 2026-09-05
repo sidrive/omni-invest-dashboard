@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useMonitorStore } from '@/stores/monitor'
-import { timeAgo } from '@/utils/time'
+import { offlineSince, offlineDuration } from '@/utils/time'
 import LoadingSpinner from '@/components/ui/LoadingSpinner.vue'
 import ZakanetMapCore from '@/components/monitor/ZakanetMapCore.vue'
 
@@ -88,7 +88,7 @@ onUnmounted(() => {
                     {{ store.clusterNameOf(d.cluster_id) }} · {{ d.ip_address }}
                   </div>
                 </div>
-                <div class="zm-offline-row-ago">{{ timeAgo(d.last_ping) }}</div>
+                <div class="zm-offline-row-ago">{{ offlineDuration(offlineSince(d)) }}</div>
               </div>
               <div v-if="!store.offlineList.length" class="zm-offline-empty">
                 Tidak ada perangkat offline.

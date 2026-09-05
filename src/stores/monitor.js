@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getClients, getClusters, syncClients as apiSyncClients } from '@/api/monitor'
-import { parseDateSafe } from '@/utils/time'
+import { parseDateSafe, offlineSince } from '@/utils/time'
 
 export const useMonitorStore = defineStore('monitor', () => {
   // ── State ──
@@ -24,9 +24,13 @@ export const useMonitorStore = defineStore('monitor', () => {
     clients.value
       .filter((c) => c.status === 'offline')
       .slice()
+      // Urut "paling lama offline" pakai offline_since (fallback last_ping
+      // untuk data lama) — bukan last_ping mentah, yang terus ke-update
+      // tiap percobaan ping walau gagal dan bikin urutannya salah.
       .sort(
         (a, b) =>
-          (parseDateSafe(a.last_ping)?.getTime() ?? 0) - (parseDateSafe(b.last_ping)?.getTime() ?? 0),
+          (parseDateSafe(offlineSince(a))?.getTime() ?? 0) -
+          (parseDateSafe(offlineSince(b))?.getTime() ?? 0),
       ),
   )
 

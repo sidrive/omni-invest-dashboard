@@ -12,7 +12,7 @@ import AdzanTakeoverOverlay from '@/components/adzan/AdzanTakeoverOverlay.vue'
 import { formatRupiah, formatJuta } from '@/utils/formatters'
 import { generateSparklineData } from '@/utils/calculator'
 import { formatCountdown } from '@/utils/adzanFormat'
-import { timeAgo } from '@/utils/time'
+import { offlineSince, offlineDuration } from '@/utils/time'
 import PriceSparkline from '@/components/charts/PriceSparkline.vue'
 
 const reportStore = useReportStore()
@@ -273,7 +273,7 @@ onUnmounted(() => {
                 <div class="stb-offline-row-name">{{ d.name }}</div>
                 <div class="stb-offline-row-meta mono">{{ d.ip_address }}</div>
               </div>
-              <div class="stb-offline-row-ago">{{ timeAgo(d.last_ping) }}</div>
+              <div class="stb-offline-row-ago">{{ offlineDuration(offlineSince(d)) }}</div>
             </div>
             <div v-if="!monitorStore.offlineList.length" class="stb-empty">Semua node online.</div>
           </div>

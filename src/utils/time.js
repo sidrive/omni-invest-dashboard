@@ -28,3 +28,30 @@ export function timeAgo(input) {
 
   return `${Math.floor(diff / 86400)} hari lalu`
 }
+
+// Backend Zakanet (zakanet-backend-monitoring) sekarang kirim `offline_since`
+// — diisi SEKALI saat transisi online->offline, tidak disentuh lagi selama
+// tetap offline (beda dari `last_ping` yang terus di-update tiap
+// ping/heartbeat walau gagal). Pakai ini untuk durasi "sudah berapa lama
+// offline" supaya tidak reset ke angka kecil tiap ada percobaan ping baru.
+// Fallback ke `last_ping` untuk kompatibilitas data lama yang belum punya
+// field ini.
+export function offlineSince(client) {
+  return client?.offline_since ?? client?.last_ping ?? null
+}
+
+// Format durasi offline sebagai "HH Jam mm Menit yang lalu" (dipakai khusus
+// untuk tampilan durasi offline — bukan pengganti timeAgo() yang masih
+// dipakai untuk "Last ping" perangkat online).
+export function offlineDuration(input) {
+  const date = parseDateSafe(input)
+  if (!date) return '—'
+
+  const diffSec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000))
+  const totalMinutes = Math.floor(diffSec / 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const pad = (n) => String(n).padStart(2, '0')
+
+  return `${pad(hours)} Jam ${pad(minutes)} Menit yang lalu`
+}

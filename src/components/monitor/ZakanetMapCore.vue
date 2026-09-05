@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useMonitorStore } from '@/stores/monitor'
-import { timeAgo } from '@/utils/time'
+import { timeAgo, offlineSince, offlineDuration } from '@/utils/time'
 
 // interactive=false dipakai untuk mode STB/kiosk (tanpa mouse/keyboard,
 // sesuai design handoff): drag/zoom/dblclick/box/keyboard/touch-zoom nonaktif.
@@ -42,7 +42,9 @@ function popupContent(c) {
         <div><strong>Status:</strong>
           <span class="${c.status === 'online' ? 'zm-status-online' : 'zm-status-offline'}">${c.status.toUpperCase()}</span>
         </div>
-        <div><strong>Last ping:</strong> ${timeAgo(c.last_ping)}</div>
+        <div><strong>${c.status === 'offline' ? 'Down sejak' : 'Last ping'}:</strong> ${
+          c.status === 'offline' ? offlineDuration(offlineSince(c)) : timeAgo(c.last_ping)
+        }</div>
       </div>
     </div>
   `
