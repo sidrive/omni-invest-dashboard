@@ -42,7 +42,8 @@ export function offlineSince(client) {
 
 // Format durasi offline sebagai "HH Jam mm Menit yang lalu" (dipakai khusus
 // untuk tampilan durasi offline — bukan pengganti timeAgo() yang masih
-// dipakai untuk "Last ping" perangkat online).
+// dipakai untuk "Last ping" perangkat online). Di bawah 1 jam, bagian "Jam"
+// dihilangkan — cukup "mm Menit yang lalu".
 export function offlineDuration(input) {
   const date = parseDateSafe(input)
   if (!date) return '—'
@@ -53,5 +54,6 @@ export function offlineDuration(input) {
   const minutes = totalMinutes % 60
   const pad = (n) => String(n).padStart(2, '0')
 
+  if (hours < 1) return `${pad(minutes)} Menit yang lalu`
   return `${pad(hours)} Jam ${pad(minutes)} Menit yang lalu`
 }
