@@ -1,7 +1,22 @@
 import axios from 'axios'
 
+// Backend Flask (omni-invest) melayani /api/* DAN static dist/ dari proses
+// yang SAMA di port 4500 (lihat PROJECT_CONTEXT.md — satu Flask app, bukan
+// backend terpisah). Karena itu path relatif ("/api") sudah cukup dan justru
+// WAJIB dipakai — browser otomatis mengarahkannya ke host:port yang sama
+// persis dengan yang dipakai untuk membuka halaman ini, apa pun alamat itu
+// (LAN lokal STB server, IP ZeroTier, dst). Sebelumnya baseURL di-hardcode
+// ke satu IP tertentu (VITE_API_BASE_URL) — ini yang bikin STB "penampil"
+// (device kedua yang cuma terhubung ke STB server lewat ZeroTier, beda
+// jalur network dari STB server itu sendiri) gagal total memanggil API:
+// browser viewer memanggil IP absolut itu langsung dari jaringannya sendiri,
+// bukan "titip" ke STB server, jadi kalau viewer tidak punya rute ke IP itu,
+// request timeout — padahal viewer tsb sudah pasti bisa reach host:port yang
+// sama karena dari situ jugalah dia berhasil memuat halamannya.
+// Vite dev server (`npm run dev`) sudah proxy "/api" -> VITE_API_BASE_URL
+// (lihat vite.config.js), jadi path relatif ini tetap jalan normal saat dev.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: '/api',
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
