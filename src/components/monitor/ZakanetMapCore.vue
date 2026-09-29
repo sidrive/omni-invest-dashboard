@@ -79,7 +79,19 @@ onMounted(() => {
     touchZoom: props.interactive,
   }).setView([-7.797068, 110.370529], 12)
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  // CARTO mewajibkan API key gratis untuk basemap ini sejak 2026 (tanpa key,
+  // tile balik dengan watermark "API KEY REQUIRED" alih-alih gambar peta —
+  // itu bukan gangguan jaringan, request-nya sendiri tetap sukses, cuma
+  // provider sengaja balas placeholder). Daftar key gratis (tanpa antrean
+  // approval, kuota 5 juta tile request/bulan) di carto.com/basemaps/apikey/,
+  // lalu isi VITE_CARTO_API_KEY di .env.production. Tanpa key di-set,
+  // fallback ke URL lama (tetap akan kena watermark sampai key diisi).
+  const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY
+  const cartoTileUrl = cartoApiKey
+    ? `https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png?key=${cartoApiKey}`
+    : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+
+  L.tileLayer(cartoTileUrl, {
     subdomains: 'abcd',
     maxZoom: 20,
     attribution: '&copy; OpenStreetMap &copy; CARTO',
